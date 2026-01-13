@@ -10,6 +10,7 @@ const CONFIG_NAME: &str = "mdnrc";
 const DEFAULT_ROOT_DIR: &str = "repository";
 const CONFIG_OVERRIDE_ENV: &str = "MDNOTES_CONFIG_HOME";
 const ROOT_OVERRIDE_ENV: &str = "MDNOTES_ROOT";
+const TAG_LINK_EXT: &str = "link";
 
 fn main() {
     if let Err(err) = dispatch() {
@@ -171,34 +172,43 @@ fn handle_add(args: &[String]) -> Result<(), String> {
     while i < args.len() {
         match args[i].as_str() {
             "--tags" => {
-                if let Some(raw) = args.get(i + 1) {
-                    tags = parse_tags(raw);
-                }
+                let raw = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --tags".to_string())?;
+                tags = parse_tags(raw);
                 i += 2;
             }
             "--body" => {
-                if let Some(raw) = args.get(i + 1) {
-                    body = raw.clone();
-                }
+                let raw = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --body".to_string())?;
+                body = raw.clone();
                 i += 2;
             }
             "--priority" => {
-                if let Some(raw) = args.get(i + 1) {
-                    priority = Priority::from_str(raw);
-                }
+                let raw = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --priority".to_string())?;
+                priority = Some(parse_priority_value(raw)?);
                 i += 2;
             }
             "--due" => {
-                if let Some(raw) = args.get(i + 1) {
-                    due = Some(raw.clone());
-                }
+                let raw = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --due".to_string())?;
+                due = Some(raw.clone());
                 i += 2;
             }
             other => {
+                if other.starts_with('-') {
+                    return Err(format!("Unknown argument '{other}'"));
+                }
                 if title.is_none() {
                     title = Some(other.to_string());
+                    i += 1;
+                } else {
+                    return Err(format!("Unknown argument '{other}'"));
                 }
-                i += 1;
             }
         }
     }
@@ -231,8 +241,28 @@ fn handle_list(args: &[String]) -> Result<(), String> {
     }
     let target = args[0].as_str();
     let config = ensure_setup(None)?;
-    let filter_status = find_option(args, "--status").and_then(|v| Status::from_str(&v));
-    let filter_priority = find_option(args, "--priority").and_then(|v| Priority::from_str(&v));
+    let mut filter_status: Option<Status> = None;
+    let mut filter_priority: Option<Priority> = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--status" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --status".to_string())?;
+                filter_status = Some(parse_status_value(v)?);
+                i += 2;
+            }
+            "--priority" => {
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --priority".to_string())?;
+                filter_priority = Some(parse_priority_value(v)?);
+                i += 2;
+            }
+            other => return Err(format!("Unknown option '{other}'")),
+        }
+    }
     match target {
         "notes" | "note" | "n" => {
             let notes = load_items(&config, ItemKind::Note)?;
@@ -282,9 +312,9 @@ fn handle_delete(args: &[String]) -> Result<(), String> {
         .get(0)
         .ok_or_else(|| "Provide an id or prefix".to_string())?;
     let config = ensure_setup(None)?;
-    let (kind, path, _) = resolve_item(&config, id)?;
+    let (_kind, path, _) = resolve_item(&config, id)?;
     fs::remove_file(&path).map_err(|e| e.to_string())?;
-    remove_tag_links(&config, &path, &kind)?;
+    remove_tag_links(&config, &path)?;
     println!("Deleted {}", path.display());
     Ok(())
 }
@@ -295,44 +325,50 @@ fn handle_edit(args: &[String]) -> Result<(), String> {
     }
     let id = &args[0];
     let config = ensure_setup(None)?;
-    let (kind, path, mut item) = resolve_item(&config, id)?;
+    let (_kind, path, mut item) = resolve_item(&config, id)?;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
             "--title" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.title = v.clone();
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --title".to_string())?;
+                item.title = v.clone();
                 i += 2;
             }
             "--body" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.body = v.clone();
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --body".to_string())?;
+                item.body = v.clone();
                 i += 2;
             }
             "--tags" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.tags = parse_tags(v);
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --tags".to_string())?;
+                item.tags = parse_tags(v);
                 i += 2;
             }
             "--due" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.due = Some(v.clone());
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --due".to_string())?;
+                item.due = Some(v.clone());
                 i += 2;
             }
             "--priority" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.priority = Priority::from_str(v);
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --priority".to_string())?;
+                item.priority = Some(parse_priority_value(v)?);
                 i += 2;
             }
             "--status" => {
-                if let Some(v) = args.get(i + 1) {
-                    item.status = Status::from_str(v);
-                }
+                let v = args
+                    .get(i + 1)
+                    .ok_or_else(|| "Missing value for --status".to_string())?;
+                item.status = Some(parse_status_value(v)?);
                 i += 2;
             }
             other => {
@@ -340,7 +376,6 @@ fn handle_edit(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    item.kind = kind.clone();
     write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
     println!("Updated {}", path.display());
@@ -385,11 +420,11 @@ fn handle_complete(args: &[String], completed: bool) -> Result<(), String> {
     });
     write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
-    println!(
-        "Task {} marked {}",
-        item.id,
-        item.status.as_ref().unwrap().as_str()
-    );
+    if let Some(status) = &item.status {
+        println!("Task {} marked {}", item.id, status.as_str());
+    } else {
+        println!("Task {} updated", item.id);
+    }
     Ok(())
 }
 
@@ -419,13 +454,6 @@ fn handle_show(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn find_option(args: &[String], name: &str) -> Option<String> {
-    args.windows(2)
-        .find(|w| w[0] == name)
-        .and_then(|w| w.get(1))
-        .cloned()
-}
-
 fn parse_tags(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(|s| s.trim().to_string())
@@ -439,6 +467,14 @@ fn format_tags(tags: &[String]) -> String {
     } else {
         format!(" [{}]", tags.join(", "))
     }
+}
+
+fn parse_priority_value(raw: &str) -> Result<Priority, String> {
+    Priority::from_str(raw).ok_or_else(|| format!("Invalid priority '{raw}'"))
+}
+
+fn parse_status_value(raw: &str) -> Result<Status, String> {
+    Status::from_str(raw).ok_or_else(|| format!("Invalid status '{raw}'"))
 }
 
 fn config_home() -> PathBuf {
@@ -546,7 +582,15 @@ fn initialize_git(root: &Path) {
     if root.join(".git").exists() {
         return;
     }
-    let _ = Command::new("git").arg("init").arg(root).output();
+    match Command::new("git").arg("init").arg(root).output() {
+        Ok(output) if !output.status.success() => {
+            eprintln!("Warning: git init exited with status {}", output.status);
+        }
+        Err(err) => {
+            eprintln!("Warning: failed to initialize git repository: {err}");
+        }
+        _ => {}
+    }
 }
 
 fn write_item(config: &Config, item: &Item) -> Result<PathBuf, String> {
@@ -709,20 +753,25 @@ fn refresh_tag_links(config: &Config, item: &Item) -> Result<(), String> {
         .root
         .join(item.kind.dir_name())
         .join(format!("{}.md", item.id));
-    remove_tag_links(config, &path, &item.kind)?;
+    remove_tag_links(config, &path)?;
     for tag in &item.tags {
         let dir = config.root.join("tags").join(tag);
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let link = dir.join(format!("{}.lnk", item.id));
+        let link = dir.join(format!("{}.{}", item.id, TAG_LINK_EXT));
         if link.exists() {
-            let _ = fs::remove_file(&link);
+            if let Err(err) = fs::remove_file(&link) {
+                eprintln!(
+                    "Warning: failed to replace existing tag link {}: {err}",
+                    link.display()
+                );
+            }
         }
         create_symlink(&path, &link)?;
     }
     Ok(())
 }
 
-fn remove_tag_links(config: &Config, path: &Path, kind: &ItemKind) -> Result<(), String> {
+fn remove_tag_links(config: &Config, path: &Path) -> Result<(), String> {
     let tags_dir = config.root.join("tags");
     if !tags_dir.exists() {
         return Ok(());
@@ -738,9 +787,14 @@ fn remove_tag_links(config: &Config, path: &Path, kind: &ItemKind) -> Result<(),
         if !tag_dir.is_dir() {
             continue;
         }
-        let link_path = tag_dir.join(format!("{}.lnk", stem));
+        let link_path = tag_dir.join(format!("{}.{}", stem, TAG_LINK_EXT));
         if link_path.exists() {
-            let _ = fs::remove_file(link_path);
+            if let Err(err) = fs::remove_file(&link_path) {
+                eprintln!(
+                    "Warning: failed to remove tag link {}: {err}",
+                    link_path.display()
+                );
+            }
         }
     }
     // clean tag directories that became empty
@@ -753,13 +807,14 @@ fn remove_tag_links(config: &Config, path: &Path, kind: &ItemKind) -> Result<(),
                 .next()
                 .is_none()
         {
-            let _ = fs::remove_dir(tag_dir);
+            if let Err(err) = fs::remove_dir(&tag_dir) {
+                eprintln!(
+                    "Warning: failed to remove empty tag directory {}: {err}",
+                    tag_dir.display()
+                );
+            }
         }
     }
-    // ensure base dirs exist after cleanup
-    let _ = ensure_directories(&config.root);
-    // keep notes/tasks directories intact
-    let _ = kind;
     Ok(())
 }
 
@@ -879,7 +934,7 @@ mod tests {
             .root
             .join("tags")
             .join("one")
-            .join(format!("{id}.lnk"));
+            .join(format!("{id}.{}", TAG_LINK_EXT));
         assert!(tag_one.exists());
         handle_edit(&vec![
             id.clone(),
@@ -893,7 +948,7 @@ mod tests {
             .root
             .join("tags")
             .join("three")
-            .join(format!("{id}.lnk"));
+            .join(format!("{id}.{}", TAG_LINK_EXT));
         assert!(tag_three.exists());
         assert!(!tag_one.exists());
     }
