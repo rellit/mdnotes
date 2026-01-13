@@ -4,6 +4,14 @@ This document tracks the features planned for mdnotes - a command-line/TUI appli
 
 ## Core Features
 
+### Setup
+- We'll keep our config in a config File named 'mdnrc' in a place suitable for the current OS. For Linux use ~/.config/mdnotes. For Windows and Mac use proper dirs.
+- When a command gets executed, run a CLI Setup to create the File.
+- We need a root Folder to store the notes.
+- We need a Repo to sync to (try it, it should be empty in first place?).
+- All other questions/settings that are needed
+
+
 ### Note Management
 - Create new notes
 - Edit existing notes
