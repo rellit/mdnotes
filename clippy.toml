@@ -1,0 +1,8 @@
+# Clippy configuration
+# See https://doc.rust-lang.org/clippy/
+
+# Warn if a function's cognitive complexity exceeds this threshold
+cognitive-complexity-threshold = 30
+
+# Warn if a type's name is too long
+type-complexity-threshold = 250

@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    branches: [ release ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Get version from Cargo.toml
+      id: get_version
+      run: |
+        VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.get_version.outputs.version }}
+        release_name: Release v${{ steps.get_version.outputs.version }}
+        body: |
+          Automated release v${{ steps.get_version.outputs.version }}
+          
+          ## Downloads
+          - Windows: mdnotes-windows-x86_64.exe
+          - Linux: mdnotes-linux-x86_64
+          - macOS (Intel): mdnotes-macos-x86_64
+          - macOS (Apple Silicon): mdnotes-macos-aarch64
+        draft: false
+        prerelease: false
+
+  build-and-upload:
+    name: Build and Upload - ${{ matrix.name }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: Linux x86_64
+            artifact_name: mdnotes
+            asset_name: mdnotes-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: Windows x86_64
+            artifact_name: mdnotes.exe
+            asset_name: mdnotes-windows-x86_64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: macOS x86_64
+            artifact_name: mdnotes
+            asset_name: mdnotes-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: macOS ARM64
+            artifact_name: mdnotes
+            asset_name: mdnotes-macos-aarch64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+
+    - name: Build release binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+        asset_name: ${{ matrix.asset_name }}
+        asset_content_type: application/octet-stream
