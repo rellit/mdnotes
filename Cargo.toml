@@ -11,6 +11,7 @@ keywords = ["notes", "tasks", "cli", "tui", "markdown"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+uuid = { version = "1.19.0", features = ["v4"] }
 
 [profile.release]
 strip = true
