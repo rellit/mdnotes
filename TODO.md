@@ -8,7 +8,8 @@ This file tracks implementation tasks for mdnotes.
 
 ### Setup
 - [x] Create `mdnrc` config file in platform-appropriate location and run setup on first command.
-- [ ] Establish root folder for notes and initialize/sync with remote repo (initially empty).
+- [x] Establish root folder for notes and initialize local git repository.
+- [ ] Implement sync with (initially empty) remote git repository.
 - [ ] Gather remaining required settings during setup.
 
 ### Note Management
