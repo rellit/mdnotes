@@ -1,0 +1,18 @@
+[package]
+name = "mdnotes"
+version = "0.1.0"
+edition = "2021"
+authors = ["rellit"]
+description = "A simple command-line/TUI application for taking notes and managing tasks"
+license = "MIT"
+repository = "https://github.com/rellit/mdnotes"
+readme = "README.md"
+keywords = ["notes", "tasks", "cli", "tui", "markdown"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
