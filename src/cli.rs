@@ -22,37 +22,37 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Initialize configuration and storage
-    #[command(alias = "s")]
     Setup {
         /// Optional custom root directory
+        #[arg(long)]
         root: Option<PathBuf>,
         /// Optional remote git repository url
         #[arg(long)]
         remote: Option<String>,
     },
     /// Create a new note or task
-    #[command(alias = "a")]
+    #[command(visible_alias = "a")]
     Add(AddArgs),
     /// List notes or tasks
-    #[command(alias = "ls", alias = "l")]
+    #[command(visible_aliases = ["ls", "l"])]
     List(ListArgs),
     /// Delete a note or task by id/prefix
-    #[command(alias = "d", alias = "del")]
+    #[command(visible_aliases = ["d", "del"])]
     Delete { id: String },
     /// Edit an existing note or task
-    #[command(alias = "e")]
+    #[command(visible_alias = "e")]
     Edit(EditArgs),
     /// Search notes by content or title
-    #[command(alias = "find")]
+    #[command(visible_alias = "find")]
     Search { query: String },
     /// Mark task complete
-    #[command(alias = "c")]
+    #[command(visible_alias = "c")]
     Complete { id: String },
     /// Mark task incomplete
-    #[command(alias = "ic")]
+    #[command(visible_alias = "ic")]
     Incomplete { id: String },
     /// Show full item content
-    #[command(alias = "sh")]
+    #[command(visible_aliases = ["sh", "s"])]
     Show { id: String },
 }
 

@@ -77,10 +77,7 @@ pub fn sync_pull(config: &Config) -> MdResult<()> {
     if !verify.status.success() {
         return Ok(());
     }
-    let pull = git(
-        &config.root,
-        &["pull", "--ff-only", &remote_name, &branch],
-    )?;
+    let pull = git(&config.root, &["pull", "--ff-only", &remote_name, &branch])?;
     if !pull.status.success() {
         return Err(MdError(format!(
             "git pull failed: {}",
