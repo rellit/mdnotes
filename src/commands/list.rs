@@ -1,11 +1,13 @@
 use crate::cli::{ListArgs, ListTarget};
 use crate::config::{ensure_setup, SetupOptions};
+use crate::git::sync_pull;
 use crate::models::ItemKind;
 use crate::storage::load_items;
 use crate::MdResult;
 
 pub fn run(args: ListArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
+    sync_pull(&config)?;
     match args.target {
         ListTarget::Notes => {
             let notes = load_items(&config, ItemKind::Note)?;

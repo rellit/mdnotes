@@ -1,4 +1,5 @@
 use crate::config::{ensure_setup, SetupOptions};
+use crate::git::{sync_pull, sync_push};
 use crate::models::{ItemKind, Status};
 use crate::storage::{resolve_item, write_item};
 use crate::tags::refresh_tag_links;
@@ -6,6 +7,7 @@ use crate::MdResult;
 
 pub fn run(id: String, completed: bool, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
+    sync_pull(&config)?;
     let (kind, _path, mut item) = resolve_item(&config, &id)?;
     if !matches!(kind, ItemKind::Task) {
         return Err("Completion can only be toggled for tasks".into());
@@ -21,5 +23,6 @@ pub fn run(id: String, completed: bool, setup: SetupOptions) -> MdResult<Vec<Str
         Some(status) => format!("Task {} marked {}", item.id, status.as_str()),
         None => format!("Task {} updated", item.id),
     };
+    sync_push(&config, &format!("mdnotes: complete {}", item.id))?;
     Ok(vec![message])
 }

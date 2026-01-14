@@ -1,5 +1,6 @@
 use crate::cli::AddArgs;
 use crate::config::{ensure_setup, SetupOptions};
+use crate::git::{sync_pull, sync_push};
 use crate::models::{Item, ItemKind, Status};
 use crate::storage::write_item;
 use crate::tags::refresh_tag_links;
@@ -9,6 +10,7 @@ use uuid::Uuid;
 
 pub fn run(args: AddArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
+    sync_pull(&config)?;
     validate_supported_fields(
         args.kind.clone(),
         args.priority.is_some(),
@@ -36,6 +38,7 @@ pub fn run(args: AddArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     }
     let path = write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
+    sync_push(&config, &format!("mdnotes: add {}", item.id))?;
     Ok(vec![format!("Created {}", path.display())])
 }
 

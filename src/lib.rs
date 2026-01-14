@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod git;
 pub mod models;
 pub mod storage;
 pub mod tags;
@@ -64,9 +65,10 @@ fn dispatch(cli: Cli) -> MdResult<Vec<String>> {
     let setup_opts = config::SetupOptions {
         root_override: cli.root_override.clone(),
         config_home: cli.config_home.clone(),
+        remote_override: None,
     };
     match cli.command {
-        Commands::Setup { root } => commands::setup::run(root, setup_opts),
+        Commands::Setup { root, remote } => commands::setup::run(root, remote, setup_opts),
         Commands::Add(args) => commands::add::run(args, setup_opts),
         Commands::List(args) => commands::list::run(args, setup_opts),
         Commands::Delete { id } => commands::delete::run(id, setup_opts),

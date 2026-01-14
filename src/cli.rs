@@ -26,6 +26,9 @@ pub enum Commands {
     Setup {
         /// Optional custom root directory
         root: Option<PathBuf>,
+        /// Optional remote git repository url
+        #[arg(long)]
+        remote: Option<String>,
     },
     /// Create a new note or task
     #[command(alias = "a")]

@@ -20,17 +20,29 @@ pub struct Config {
 pub struct SetupOptions {
     pub root_override: Option<PathBuf>,
     pub config_home: Option<PathBuf>,
+    pub remote_override: Option<String>,
 }
 
 pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     let config_file = config_path(&opts);
     if config_file.exists() {
         let mut config = read_config(&config_file)?;
+        let mut changed = false;
         if let Some(root) = opts.root_override {
             config.root = root;
+            changed = true;
+        }
+        if let Some(remote) = opts.remote_override {
+            config.remote = Some(remote);
+            changed = true;
+        }
+        if changed {
             write_config(&config_file, &config)?;
         }
         ensure_directories(&config.root)?;
+        if let Some(remote) = &config.remote {
+            ensure_remote_configured(&config.root, remote)?;
+        }
         return Ok(config);
     }
 
@@ -38,10 +50,16 @@ pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     let root = root_override
         .or_else(|| env::var_os(ROOT_OVERRIDE_ENV).map(PathBuf::from))
         .unwrap_or_else(|| config_home(&opts).join(DEFAULT_ROOT_DIR));
-    let config = Config { root, remote: None };
+    let config = Config {
+        root,
+        remote: opts.remote_override.clone(),
+    };
     write_config(&config_file, &config)?;
     ensure_directories(&config.root)?;
     initialize_git(&config.root)?;
+    if let Some(remote) = &config.remote {
+        ensure_remote_configured(&config.root, remote)?;
+    }
     Ok(config)
 }
 
@@ -134,6 +152,37 @@ fn initialize_git(root: &Path) -> MdResult<()> {
             "git init failed with status {}",
             output.status
         )));
+    }
+    Ok(())
+}
+
+fn ensure_remote_configured(root: &Path, remote: &str) -> MdResult<()> {
+    let has_origin = Command::new("git")
+        .current_dir(root)
+        .args(["remote", "get-url", "origin"])
+        .output()?;
+    if has_origin.status.success() {
+        let out = Command::new("git")
+            .current_dir(root)
+            .args(["remote", "set-url", "origin", remote])
+            .output()?;
+        if !out.status.success() {
+            return Err(MdError(format!(
+                "git remote set-url failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
+    } else {
+        let out = Command::new("git")
+            .current_dir(root)
+            .args(["remote", "add", "origin", remote])
+            .output()?;
+        if !out.status.success() {
+            return Err(MdError(format!(
+                "git remote add failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            )));
+        }
     }
     Ok(())
 }

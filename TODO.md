@@ -30,7 +30,8 @@ This file tracks implementation tasks for mdnotes.
 - [x] Store notes/tasks as markdown with header for metadata and body after `--`.
 - [x] Save files with UUID names under `notes/` and `tasks/` directories.
 - [x] Implement tag directory with symlinks (or alternative for Windows) pointing to note/task UUIDs.
-- [ ] Add git sync before commands, UI for conflicts, and automatic commits on modifications.
+- [x] Add git sync before commands and automatic commits/pushes on modifications.
+- [ ] Add UI for conflicts when git remains in a conflicting state.
 
 ### User Interface
 - [x] Provide `mdn` CLI with short aliases and UUID-prefix support for commands (add/edit).

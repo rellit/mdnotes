@@ -3,6 +3,7 @@ use mdnotes::models::{ItemKind, Status};
 use mdnotes::storage::{load_items, resolve_item};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn temp_home(name: &str) -> PathBuf {
     let base = std::env::temp_dir().join("mdnotes-tests").join(name);
@@ -79,6 +80,7 @@ fn task_lifecycle_with_due_and_priority() {
     let config = ensure_setup(SetupOptions {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
+        remote_override: None,
     })
     .unwrap();
     let tasks = load_items(&config, ItemKind::Task).unwrap();
@@ -116,4 +118,21 @@ fn delete_cleans_up_tags() {
     assert!(tag_one.exists());
     run_with(&base, &["delete", &id]);
     assert!(!tag_one.exists());
+}
+
+#[test]
+fn setup_accepts_remote_and_sets_origin() {
+    let base = temp_home("setup_remote");
+    let remote = "https://example.com/repo.git";
+    run_with(&base, &["setup", "--remote", remote]);
+    let config_contents = std::fs::read_to_string(base.join("config").join("mdnrc")).unwrap();
+    assert!(config_contents.contains(remote));
+    let origin = Command::new("git")
+        .current_dir(base.join("repo"))
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .unwrap();
+    assert!(origin.status.success());
+    let url = String::from_utf8_lossy(&origin.stdout);
+    assert!(url.contains(remote));
 }

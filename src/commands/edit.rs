@@ -1,5 +1,6 @@
 use crate::cli::EditArgs;
 use crate::config::{ensure_setup, SetupOptions};
+use crate::git::{sync_pull, sync_push};
 use crate::models::{ItemKind, Priority};
 use crate::storage::{resolve_item, write_item};
 use crate::tags::refresh_tag_links;
@@ -8,6 +9,7 @@ use crate::{MdError, MdResult};
 
 pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
+    sync_pull(&config)?;
     let (kind, path, mut item) = resolve_item(&config, &args.id)?;
     if matches!(kind, ItemKind::Note)
         && (args.priority.is_some() || args.due.is_some() || args.status.is_some())
@@ -39,6 +41,7 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     }
     write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
+    sync_push(&config, &format!("mdnotes: edit {}", item.id))?;
     Ok(vec![format!("Updated {}", path.display())])
 }
 
