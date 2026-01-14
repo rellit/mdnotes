@@ -52,7 +52,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: mdnotes-${{ matrix.os }}
+        name: mdn-${{ matrix.os }}
         path: |
-          target/release/mdnotes${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          target/release/mdn${{ matrix.os == 'windows-latest' && '.exe' || '' }}
         if-no-files-found: error
