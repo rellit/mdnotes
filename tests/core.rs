@@ -45,14 +45,7 @@ fn add_list_and_show_note() {
     let base = temp_home("note");
     run_with(
         &base,
-        &[
-            "add",
-            "My Note",
-            "--body",
-            "hello",
-            "--tags",
-            "rust,notes",
-        ],
+        &["add", "My Note", "--body", "hello", "--tags", "rust,notes"],
     );
     let list = run_with(&base, &["list", "notes"]);
     assert_eq!(list.len(), 1);
@@ -111,7 +104,14 @@ fn list_separates_notes_and_tasks_when_no_target() {
     run_with(&base, &["add", "Note One"]);
     run_with(
         &base,
-        &["add", "Task One", "--due", "2099-12-31", "--priority", "low"],
+        &[
+            "add",
+            "Task One",
+            "--due",
+            "2099-12-31",
+            "--priority",
+            "low",
+        ],
     );
     let list = run_with(&base, &["list"]);
     assert_eq!(list[0], "Notes:");
@@ -135,7 +135,10 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
     let id = notes[0].id.clone();
     let note_path = base.join("repo/notes").join(format!("{}.md", id));
     let mut content = std::fs::read_to_string(&note_path).unwrap();
-    content = content.replace("type: note\n", "type: note\nstatus: pending\ndue: 2099-05-01\n");
+    content = content.replace(
+        "type: note\n",
+        "type: note\nstatus: pending\ndue: 2099-05-01\n",
+    );
     std::fs::write(&note_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
     std::env::set_var("EDITOR", "true");
@@ -155,14 +158,8 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
 #[test]
 fn search_finds_note_by_title_and_body() {
     let base = temp_home("search");
-    run_with(
-        &base,
-        &["add", "Alpha Note", "--body", "first body"],
-    );
-    run_with(
-        &base,
-        &["add", "Second", "--body", "contains keyword"],
-    );
+    run_with(&base, &["add", "Alpha Note", "--body", "first body"]);
+    run_with(&base, &["add", "Second", "--body", "contains keyword"]);
     let results = run_with(&base, &["search", "keyword"]);
     assert_eq!(results.len(), 1);
     assert!(results[0].contains("Second"));

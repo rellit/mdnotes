@@ -80,7 +80,12 @@ pub enum ListTarget {
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
-    #[arg(value_enum, value_name = "target", help = "notes|tasks", required = false)]
+    #[arg(
+        value_enum,
+        value_name = "target",
+        help = "notes|tasks",
+        required = false
+    )]
     pub target: Option<ListTarget>,
     #[arg(long, value_enum)]
     pub status: Option<Status>,
