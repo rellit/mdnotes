@@ -86,6 +86,7 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
     let mut kind = fallback_kind.clone();
     let mut body = String::new();
     let mut in_body = false;
+    let mut explicit_type = false;
     for line in content.lines() {
         if in_body {
             if !body.is_empty() {
@@ -131,7 +132,8 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
                                 path.display()
                             )))
                         }
-                    }
+                    };
+                    explicit_type = true;
                 }
                 _ => {}
             }
@@ -145,6 +147,13 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
         })
         .ok_or_else(|| MdError("Missing id".into()))?;
     let title = title.ok_or_else(|| MdError("Missing title".into()))?;
+    let kind = if status.is_some() || due.is_some() {
+        ItemKind::Task
+    } else if explicit_type {
+        kind
+    } else {
+        fallback_kind
+    };
     Ok(Item {
         id,
         title,

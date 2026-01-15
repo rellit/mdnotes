@@ -88,14 +88,10 @@ pub fn sync_pull(config: &Config) -> MdResult<()> {
 }
 
 pub fn sync_push(config: &Config, message: &str) -> MdResult<()> {
-    if config.remote.is_none() {
-        return Ok(());
-    }
-    let remote_name = remote_name(&config.root)?;
-    let branch = current_branch(&config.root)?;
     if !has_changes(&config.root)? {
         return Ok(());
     }
+    ensure_user_identity(&config.root)?;
     let add = git(&config.root, &["add", "-A"])?;
     if !add.status.success() {
         return Err(MdError(format!(
@@ -110,6 +106,11 @@ pub fn sync_push(config: &Config, message: &str) -> MdResult<()> {
             String::from_utf8_lossy(&commit.stderr)
         )));
     }
+    if config.remote.is_none() {
+        return Ok(());
+    }
+    let remote_name = remote_name(&config.root)?;
+    let branch = current_branch(&config.root)?;
     let mut push_args = vec!["push"];
     if !upstream_configured(&config.root)? {
         push_args.push("-u");
@@ -143,4 +144,25 @@ fn upstream_configured(root: &Path) -> MdResult<bool> {
         &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
     )?;
     Ok(out.status.success())
+}
+
+fn ensure_user_identity(root: &Path) -> MdResult<()> {
+    ensure_git_config(root, "user.name", "mdnotes")?;
+    ensure_git_config(root, "user.email", "mdnotes@example.com")?;
+    Ok(())
+}
+
+fn ensure_git_config(root: &Path, key: &str, value: &str) -> MdResult<()> {
+    let current = git(root, &["config", key])?;
+    if current.status.success() && !String::from_utf8_lossy(&current.stdout).trim().is_empty() {
+        return Ok(());
+    }
+    let set = git(root, &["config", key, value])?;
+    if !set.status.success() {
+        return Err(MdError(format!(
+            "git config {key} failed: {}",
+            String::from_utf8_lossy(&set.stderr)
+        )));
+    }
+    Ok(())
 }

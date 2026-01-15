@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
-use crate::models::{ItemKind, Priority, Status};
+use crate::models::{Priority, Status};
 use crate::util::validate_due;
 
 #[derive(Parser, Debug)]
@@ -58,13 +58,13 @@ pub enum Commands {
 
 #[derive(Args, Debug)]
 pub struct AddArgs {
-    #[arg(value_enum, value_name = "kind", help = "note|task")]
-    pub kind: ItemKind,
     pub title: String,
     #[arg(long)]
     pub body: Option<String>,
     #[arg(long, value_parser = validate_due)]
     pub due: Option<String>,
+    #[arg(long, value_enum)]
+    pub status: Option<Status>,
     #[arg(long, value_enum)]
     pub priority: Option<Priority>,
     #[arg(long)]
@@ -73,14 +73,15 @@ pub struct AddArgs {
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum ListTarget {
+    All,
     Notes,
     Tasks,
 }
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
-    #[arg(value_enum, value_name = "target", help = "notes|tasks")]
-    pub target: ListTarget,
+    #[arg(value_enum, value_name = "target", help = "notes|tasks", required = false)]
+    pub target: Option<ListTarget>,
     #[arg(long, value_enum)]
     pub status: Option<Status>,
     #[arg(long, value_enum)]

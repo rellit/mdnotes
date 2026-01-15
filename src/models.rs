@@ -46,6 +46,14 @@ impl ItemKind {
             ItemKind::Task => "tasks",
         }
     }
+
+    pub fn infer(status: &Option<Status>, due: &Option<String>) -> ItemKind {
+        if status.is_some() || due.is_some() {
+            ItemKind::Task
+        } else {
+            ItemKind::Note
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

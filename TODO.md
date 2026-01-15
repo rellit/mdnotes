@@ -19,6 +19,9 @@ This file tracks implementation tasks for mdnotes.
 - [x] List all notes.
 - [x] Search notes by content or title.
 - [x] Tag notes for organization.
+- [x] Auto-classify notes with due/status as tasks while allowing priorities on notes.
+- [x] List unfiltered results with notes and tasks separated.
+- [x] Launch editor when editing without flags, then re-parse and relocate notes/tasks as needed.
 
 ### Task Management
 - [x] Create tasks with due dates.
@@ -30,7 +33,7 @@ This file tracks implementation tasks for mdnotes.
 - [x] Store notes/tasks as markdown with header for metadata and body after `--`.
 - [x] Save files with UUID names under `notes/` and `tasks/` directories.
 - [x] Implement tag directory with symlinks (or alternative for Windows) pointing to note/task UUIDs.
-- [x] Add git sync before commands and automatic commits/pushes on modifications.
+- [x] Add git sync before commands and automatic commits for modifications, pushing when a remote is configured.
 - [ ] Add UI for conflicts when git remains in a conflicting state.
 
 ### User Interface
