@@ -11,8 +11,14 @@ keywords = ["notes", "tasks", "cli", "tui", "markdown"]
 categories = ["command-line-utilities"]
 
 [dependencies]
+uuid = { version = "1.19.0", features = ["v4"] }
+clap = { version = "4.5.13", features = ["derive"] }
 
 [profile.release]
 strip = true
 lto = true
 codegen-units = 1
+
+[[bin]]
+name = "mdn"
+path = "src/main.rs"
