@@ -57,7 +57,15 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
 }
 
 fn open_editor(path: &std::path::Path) -> MdResult<()> {
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".into());
+    let editor = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| {
+            if cfg!(target_os = "windows") {
+                "notepad".into()
+            } else {
+                "vi".into()
+            }
+        });
     let status = Command::new(editor)
         .arg(path)
         .status()

@@ -147,8 +147,14 @@ fn upstream_configured(root: &Path) -> MdResult<bool> {
 }
 
 fn ensure_user_identity(root: &Path) -> MdResult<()> {
-    ensure_git_config(root, "user.name", "mdnotes")?;
-    ensure_git_config(root, "user.email", "mdnotes@example.com")?;
+    let default_name = std::env::var("GIT_AUTHOR_NAME")
+        .or_else(|_| std::env::var("GIT_COMMITTER_NAME"))
+        .unwrap_or_else(|_| "mdnotes".into());
+    let default_email = std::env::var("GIT_AUTHOR_EMAIL")
+        .or_else(|_| std::env::var("GIT_COMMITTER_EMAIL"))
+        .unwrap_or_else(|_| "mdnotes@example.com".into());
+    ensure_git_config(root, "user.name", &default_name)?;
+    ensure_git_config(root, "user.email", &default_email)?;
     Ok(())
 }
 
