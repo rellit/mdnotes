@@ -26,14 +26,18 @@ pub fn run(args: FindArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
 }
 
 fn matches_query(value: &str, query: &str) -> bool {
-    value.to_ascii_lowercase().contains(query)
+    value.contains(query)
 }
 
 fn find_notes(config: &crate::config::Config, query: &str) -> MdResult<Vec<String>> {
     let notes = load_items(config, ItemKind::Note)?;
     Ok(notes
         .into_iter()
-        .filter(|note| matches_query(&note.title, query) || matches_query(&note.body, query))
+        .filter(|note| {
+            let title = note.title.to_ascii_lowercase();
+            let body = note.body.to_ascii_lowercase();
+            matches_query(&title, query) || matches_query(&body, query)
+        })
         .map(|note| format!("{} - {}", note.id, note.title))
         .collect())
 }
@@ -42,7 +46,9 @@ fn find_tasks(config: &crate::config::Config, query: &str) -> MdResult<Vec<Strin
     let tasks = load_items(config, ItemKind::Task)?;
     let mut out = Vec::new();
     for task in tasks {
-        if !matches_query(&task.title, query) && !matches_query(&task.body, query) {
+        let title = task.title.to_ascii_lowercase();
+        let body = task.body.to_ascii_lowercase();
+        if !matches_query(&title, query) && !matches_query(&body, query) {
             continue;
         }
         out.push(format!(
