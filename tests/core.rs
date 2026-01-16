@@ -307,11 +307,7 @@ fn sync_pull_fast_forwards_remote_updates() {
 
     let clone_dir = base.join("clone");
     assert!(Command::new("git")
-        .args([
-            "clone",
-            &remote_str,
-            clone_dir.to_string_lossy().as_ref()
-        ])
+        .args(["clone", &remote_str, clone_dir.to_string_lossy().as_ref()])
         .output()
         .unwrap()
         .status
