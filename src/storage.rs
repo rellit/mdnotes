@@ -7,21 +7,39 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+const HEADER_EXAMPLES: &str = "\
+# id: 00000000-0000-4000-8000-000000000000
+# title: Example Title
+# type: note|task
+# status: pending|completed
+# priority: low|medium|high
+# due: 2099-12-31
+# tags: tag-one, tag-two
+";
+
 pub fn write_item(config: &Config, item: &Item) -> MdResult<PathBuf> {
+    write_item_inner(config, item, false)
+}
+
+pub fn write_item_with_examples(config: &Config, item: &Item) -> MdResult<PathBuf> {
+    write_item_inner(config, item, true)
+}
+
+fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdResult<PathBuf> {
     ensure_directories(&config.root)?;
     let dir = config.root.join(item.kind.dir_name());
     let path = dir.join(format!("{}.md", item.id));
     let tmp_path = dir.join(format!("{}.md.tmp", item.id));
     {
         let mut file = File::create(&tmp_path)?;
-        write_header(&mut file, item)?;
+        write_header(&mut file, item, include_examples)?;
         file.sync_all()?;
     }
     fs::rename(&tmp_path, &path)?;
     Ok(path)
 }
 
-fn write_header(file: &mut File, item: &Item) -> MdResult<()> {
+fn write_header(file: &mut File, item: &Item, include_examples: bool) -> MdResult<()> {
     writeln!(file, "id: {}", item.id)?;
     writeln!(file, "title: {}", item.title)?;
     writeln!(
@@ -43,6 +61,11 @@ fn write_header(file: &mut File, item: &Item) -> MdResult<()> {
     }
     if !item.tags.is_empty() {
         writeln!(file, "tags: {}", item.tags.join(", "))?;
+    }
+    if include_examples {
+        for line in HEADER_EXAMPLES.lines() {
+            writeln!(file, "{line}")?;
+        }
     }
     writeln!(file, "--")?;
     write!(file, "{}", item.body)?;

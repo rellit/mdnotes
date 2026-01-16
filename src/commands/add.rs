@@ -2,7 +2,7 @@ use crate::cli::AddArgs;
 use crate::config::{ensure_setup, SetupOptions};
 use crate::git::{sync_pull, sync_push};
 use crate::models::{Item, ItemKind, Status};
-use crate::storage::write_item;
+use crate::storage::{write_item_with_examples};
 use crate::tags::refresh_tag_links;
 use crate::util::{parse_tags, validate_due_inner};
 use crate::MdResult;
@@ -32,7 +32,7 @@ pub fn run(args: AddArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     if matches!(item.kind, ItemKind::Task) && item.status.is_none() {
         item.status = Some(Status::Pending);
     }
-    let path = write_item(&config, &item)?;
+    let path = write_item_with_examples(&config, &item)?;
     refresh_tag_links(&config, &item)?;
     sync_push(&config, &format!("mdnotes: add {}", item.id))?;
     Ok(vec![format!("Created {}", path.display())])

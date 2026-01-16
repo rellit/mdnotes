@@ -76,6 +76,7 @@ fn dispatch(cli: Cli) -> MdResult<Vec<String>> {
         Commands::Search { query } => commands::search::run(query, setup_opts),
         Commands::Complete { id } => commands::complete::run(id, true, setup_opts),
         Commands::Incomplete { id } => commands::complete::run(id, false, setup_opts),
+        Commands::Due { id, due } => commands::due::run(id, due, setup_opts),
         Commands::Show { id } => commands::show::run(id, setup_opts),
     }
 }
