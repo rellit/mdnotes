@@ -2,6 +2,7 @@ pub mod add;
 pub mod complete;
 pub mod config;
 pub mod delete;
+pub mod due;
 pub mod edit;
 pub mod find;
 pub mod list;

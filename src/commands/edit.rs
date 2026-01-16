@@ -13,6 +13,7 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
     sync_pull(&config)?;
     let (original_kind, path, mut item) = resolve_item(&config, &args.id)?;
+    let original_id = item.id.clone();
     let has_field_update = args.title.is_some()
         || args.body.is_some()
         || args.tags.is_some()
@@ -22,6 +23,14 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     if !has_field_update {
         open_editor(&config, &path)?;
         item = read_item(&path, original_kind.clone())?;
+        let path_id = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&original_id)
+            .to_string();
+        if item.id != path_id {
+            item.id = path_id;
+        }
     } else {
         if let Some(title) = args.title {
             item.title = title;

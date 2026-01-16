@@ -85,6 +85,29 @@ fn task_lifecycle_with_due_and_priority() {
 }
 
 #[test]
+fn due_command_sets_and_clears_due_dates() {
+    let base = temp_home("due_command");
+    run_with(&base, &["add", "Schedule later"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let notes = load_items(&config, ItemKind::Note).unwrap();
+    let id = notes[0].id.clone();
+    run_with(&base, &["due", &id, "2099-02-02"]);
+    let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
+    assert_eq!(updated.due, Some("2099-02-02".into()));
+    assert_eq!(updated.kind, ItemKind::Task);
+    assert_eq!(updated.status, Some(Status::Pending));
+    run_with(&base, &["due", &id]);
+    let (_kind2, _p2, cleared) = resolve_item(&config, &id).unwrap();
+    assert_eq!(cleared.due, None);
+}
+
+#[test]
 fn notes_allow_priority_without_becoming_tasks() {
     let base = temp_home("note_priority");
     run_with(&base, &["add", "Important Note", "--priority", "high"]);
@@ -156,6 +179,43 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
     assert!(task_path.exists());
     let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
     assert_eq!(updated.kind, ItemKind::Task);
+}
+
+#[test]
+fn edit_restores_changed_id_to_filename_value() {
+    let base = temp_home("edit_id_restore");
+    run_with(&base, &["add", "Keep ID"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let notes = load_items(&config, ItemKind::Note).unwrap();
+    let id = notes[0].id.clone();
+    let new_id = "manually-changed-id";
+    let note_path = base.join("repo/notes").join(format!("{}.md", id));
+    let mut content = std::fs::read_to_string(&note_path).unwrap();
+    content = content.replace(&format!("id: {}", id), &format!("id: {}", new_id));
+    std::fs::write(&note_path, content).unwrap();
+    let prev_editor = std::env::var("EDITOR").ok();
+    std::env::set_var("EDITOR", "true");
+    run_with(&base, &["edit", &id]);
+    if let Some(prev) = prev_editor {
+        std::env::set_var("EDITOR", prev);
+    } else {
+        std::env::remove_var("EDITOR");
+    }
+    assert!(note_path.exists());
+    assert!(!base
+        .join("repo/notes")
+        .join(format!("{}.md", new_id))
+        .exists());
+    let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
+    assert_eq!(updated.id, id);
+    let updated_content = std::fs::read_to_string(&note_path).unwrap();
+    assert!(updated_content.contains(&format!("id: {}", id)));
 }
 
 #[test]

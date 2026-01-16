@@ -44,6 +44,12 @@ pub enum Commands {
     /// Mark task incomplete
     #[command(visible_alias = "ic")]
     Incomplete { id: String },
+    /// Set or clear due date
+    Due {
+        id: String,
+        #[arg(value_parser = validate_due)]
+        due: Option<String>,
+    },
     /// Show full item content
     #[command(visible_aliases = ["sh", "s"])]
     Show { id: String },
