@@ -279,15 +279,9 @@ impl ItemForm {
         if self.active == FormField::Status {
             match key.code {
                 KeyCode::Char('p') | KeyCode::Char('P') => self.status = Some(Status::Pending),
-                KeyCode::Char('c') | KeyCode::Char('C') => {
-                    self.status = Some(Status::Completed)
-                }
-                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Backspace => {
-                    self.status = None
-                }
-                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
-                    self.cycle_status()
-                }
+                KeyCode::Char('c') | KeyCode::Char('C') => self.status = Some(Status::Completed),
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Backspace => self.status = None,
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => self.cycle_status(),
                 _ => {}
             }
             return;
