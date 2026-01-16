@@ -79,7 +79,7 @@ pub fn load_items(config: &Config, kind: ItemKind) -> MdResult<Vec<Item>> {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
-            match read_item(&path, kind.clone()) {
+            match read_item(&path, kind) {
                 Ok(item) => out.push(item),
                 Err(err) => {
                     eprintln!(
@@ -103,7 +103,7 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
     let mut status: Option<Status> = None;
     let mut priority: Option<Priority> = None;
     let mut due: Option<String> = None;
-    let mut kind = fallback_kind.clone();
+    let mut kind = fallback_kind;
     let mut body = String::new();
     let mut in_body = false;
     let mut explicit_type = false;
@@ -198,7 +198,7 @@ pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(ItemKind, PathBu
             let path = entry.path();
             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                 if stem.starts_with(prefix) {
-                    matches.push((kind.clone(), path));
+                    matches.push((kind, path));
                 }
             }
         }
@@ -220,6 +220,6 @@ pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(ItemKind, PathBu
         return Err(MdError(msg));
     }
     let (kind, path) = matches.into_iter().next().unwrap();
-    let item = read_item(&path, kind.clone())?;
+    let item = read_item(&path, kind)?;
     Ok((kind, path, item))
 }

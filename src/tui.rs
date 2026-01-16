@@ -246,10 +246,10 @@ impl ItemForm {
             mode: FormMode::Edit {
                 id: item.id.clone(),
             },
-            kind: item.kind.clone(),
+            kind: item.kind,
             title: item.title.clone(),
             tags: item.tags.join(", "),
-            status: item.status.clone(),
+            status: item.status,
             due: item.due.clone().unwrap_or_default(),
             active: FormField::Title,
         }
@@ -276,24 +276,21 @@ impl ItemForm {
     }
 
     fn handle_input(&mut self, key: &KeyEvent) {
-        match self.active {
-            FormField::Status => {
-                match key.code {
-                    KeyCode::Char('p') | KeyCode::Char('P') => self.status = Some(Status::Pending),
-                    KeyCode::Char('c') | KeyCode::Char('C') => {
-                        self.status = Some(Status::Completed)
-                    }
-                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Backspace => {
-                        self.status = None
-                    }
-                    KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
-                        self.cycle_status()
-                    }
-                    _ => {}
+        if self.active == FormField::Status {
+            match key.code {
+                KeyCode::Char('p') | KeyCode::Char('P') => self.status = Some(Status::Pending),
+                KeyCode::Char('c') | KeyCode::Char('C') => {
+                    self.status = Some(Status::Completed)
                 }
-                return;
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Backspace => {
+                    self.status = None
+                }
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                    self.cycle_status()
+                }
+                _ => {}
             }
-            _ => {}
+            return;
         }
         let target = match self.active {
             FormField::Title => Some(&mut self.title),
@@ -1093,7 +1090,7 @@ impl App {
                     title: title.to_string(),
                     body: None,
                     due: due_value.clone(),
-                    status: form.status.clone(),
+                    status: form.status,
                     priority: None,
                     tags: if tags_value.is_empty() {
                         None
@@ -1118,7 +1115,7 @@ impl App {
                         due_value.clone()
                     },
                     priority: None,
-                    status: form.status.clone(),
+                    status: form.status,
                     tags: Some(tags_value.clone()),
                 };
                 edit::run(args, self.setup.clone())?;
@@ -1182,7 +1179,7 @@ impl App {
         let title = match &form.mode {
             FormMode::New => format!(
                 "New {}",
-                match form.kind.clone() {
+                match form.kind {
                     ItemKind::Note => "Note",
                     ItemKind::Task => "Task",
                 }

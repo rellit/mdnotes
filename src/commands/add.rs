@@ -21,8 +21,8 @@ pub fn run(args: AddArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
             .as_ref()
             .map(|t| parse_tags(t))
             .unwrap_or_default(),
-        status: args.status.clone(),
-        priority: args.priority.clone(),
+        status: args.status,
+        priority: args.priority,
         due: args.due.clone(),
     };
     if let Some(due) = &item.due {

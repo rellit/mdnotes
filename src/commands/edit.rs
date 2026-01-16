@@ -22,7 +22,7 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
         || args.status.is_some();
     if !has_field_update {
         open_editor(&config, &path)?;
-        item = read_item(&path, original_kind.clone())?;
+        item = read_item(&path, original_kind)?;
         let path_id = path
             .file_stem()
             .and_then(|s| s.to_str())
