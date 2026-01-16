@@ -1,4 +1,4 @@
-use mdnotes::config::{ensure_setup, SetupOptions};
+use mdnotes::config::{ensure_setup, save_config, SetupOptions};
 use mdnotes::git::sync_pull;
 use mdnotes::models::{ItemKind, Status};
 use mdnotes::storage::{load_items, resolve_item};
@@ -375,4 +375,25 @@ fn config_accepts_remote_and_sets_origin() {
     assert!(origin.status.success());
     let url = String::from_utf8_lossy(&origin.stdout);
     assert!(url.contains(remote));
+}
+
+#[test]
+fn save_config_persists_settings() {
+    let base = temp_home("config_save");
+    let opts = SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    };
+    let mut config = ensure_setup(opts.clone()).unwrap();
+    config.remote = Some("https://example.com/alt.git".into());
+    config.editor = Some("nano".into());
+    save_config(&opts, &config).unwrap();
+    let reloaded = ensure_setup(opts.clone()).unwrap();
+    assert_eq!(
+        reloaded.remote.as_deref(),
+        Some("https://example.com/alt.git")
+    );
+    assert_eq!(reloaded.editor.as_deref(), Some("nano"));
 }

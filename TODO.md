@@ -38,6 +38,7 @@ This file tracks implementation tasks for mdnotes.
 
 ### User Interface
 - [x] Provide `mdn` CLI with short aliases and UUID-prefix support for commands (add/edit).
+- [ ] Implement `mdnui` TUI using the `ratatui` crate with common (non-Vim) keybindings and arrow-key navigation.
 - [ ] Build `mdnui` TUI with notes/tasks tabs, preview pane, fast editing/tagging, and markdown syntax highlighting.
   - [ ] There should be fast fiultering by tags and for tasks also for status.
   - [ ] An overview over pending tasks driven by theire due date should exist
