@@ -63,9 +63,10 @@ pub fn sync_pull(config: &Config) -> MdResult<()> {
     if config.remote.is_none() {
         return Ok(());
     }
+    eprintln!("Checking for remote updates...");
     let remote_name = remote_name(&config.root)?;
     let branch = current_branch(&config.root)?;
-    let fetch = git(&config.root, &["fetch", &remote_name])?;
+    let fetch = git(&config.root, &["fetch", "--quiet", &remote_name])?;
     if !fetch.status.success() {
         return Err(MdError(format!(
             "git fetch failed: {}",
@@ -77,11 +78,32 @@ pub fn sync_pull(config: &Config) -> MdResult<()> {
     if !verify.status.success() {
         return Ok(());
     }
-    let pull = git(&config.root, &["pull", "--ff-only", &remote_name, &branch])?;
-    if !pull.status.success() {
+    let head = git(&config.root, &["rev-parse", "HEAD"])?;
+    if !head.status.success() {
         return Err(MdError(format!(
-            "git pull failed: {}",
-            String::from_utf8_lossy(&pull.stderr)
+            "git rev-parse HEAD failed: {}",
+            String::from_utf8_lossy(&head.stderr)
+        )));
+    }
+    let local_head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+    let remote_head = git(&config.root, &["rev-parse", &remote_ref])?;
+    if !remote_head.status.success() {
+        return Err(MdError(format!(
+            "git rev-parse {remote_ref} failed: {}",
+            String::from_utf8_lossy(&remote_head.stderr)
+        )));
+    }
+    let remote_head = String::from_utf8_lossy(&remote_head.stdout)
+        .trim()
+        .to_string();
+    if local_head == remote_head {
+        return Ok(());
+    }
+    let merge = git(&config.root, &["merge", "--ff-only", &remote_ref])?;
+    if !merge.status.success() {
+        return Err(MdError(format!(
+            "git merge failed: {}",
+            String::from_utf8_lossy(&merge.stderr)
         )));
     }
     Ok(())

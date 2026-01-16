@@ -1,8 +1,9 @@
 use mdnotes::config::{ensure_setup, SetupOptions};
+use mdnotes::git::sync_pull;
 use mdnotes::models::{ItemKind, Status};
 use mdnotes::storage::{load_items, resolve_item};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn temp_home(name: &str) -> PathBuf {
@@ -28,6 +29,26 @@ fn run_with(base: &std::path::Path, args: &[&str]) -> Vec<String> {
     let mut full = base_args(base);
     full.extend(args.iter().map(|s| s.to_string()));
     mdnotes::run_with_args(full).expect("command should succeed")
+}
+
+fn git_rev_parse(repo: &Path) -> String {
+    let out = Command::new("git")
+        .current_dir(repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+fn git_rev_parse_bare(git_dir: &Path) -> String {
+    let out = Command::new("git")
+        .arg(format!("--git-dir={}", git_dir.to_string_lossy()))
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
 #[test]
@@ -258,6 +279,89 @@ fn delete_cleans_up_tags() {
     assert!(tag_one.exists());
     run_with(&base, &["delete", &id]);
     assert!(!tag_one.exists());
+}
+
+#[test]
+fn sync_pull_fast_forwards_remote_updates() {
+    let base = temp_home("sync_pull_ff");
+    let remote = base.join("remote.git");
+    let remote_str = remote.to_string_lossy().to_string();
+    assert!(Command::new("git")
+        .args(["init", "--bare", &remote_str])
+        .output()
+        .unwrap()
+        .status
+        .success());
+
+    run_with(&base, &["config", "--remote", &remote_str]);
+    run_with(&base, &["add", "Initial"]);
+
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let initial_head = git_rev_parse(&config.root);
+
+    let clone_dir = base.join("clone");
+    assert!(Command::new("git")
+        .args([
+            "clone",
+            &remote_str,
+            clone_dir.to_string_lossy().as_ref()
+        ])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert!(Command::new("git")
+        .current_dir(&clone_dir)
+        .args(["config", "user.email", "tester@example.com"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert!(Command::new("git")
+        .current_dir(&clone_dir)
+        .args(["config", "user.name", "Tester"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    fs::write(clone_dir.join("README.md"), "update").unwrap();
+    assert!(Command::new("git")
+        .current_dir(&clone_dir)
+        .args(["add", "README.md"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert!(Command::new("git")
+        .current_dir(&clone_dir)
+        .args(["commit", "-m", "remote update"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    assert!(Command::new("git")
+        .current_dir(&clone_dir)
+        .args(["push"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+
+    let before_head = git_rev_parse(&config.root);
+    assert_eq!(before_head, initial_head);
+
+    sync_pull(&config).unwrap();
+
+    let after_head = git_rev_parse(&config.root);
+    assert_ne!(after_head, before_head);
+    let remote_head = git_rev_parse_bare(&remote);
+    assert_eq!(after_head, remote_head);
 }
 
 #[test]
