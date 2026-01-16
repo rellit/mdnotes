@@ -4,9 +4,9 @@ This document tracks the features planned for mdnotes - a command-line/TUI appli
 
 ## Core Features
 
-### Setup
+### Config
 - We'll keep our config in a config File named 'mdnrc' in a place suitable for the current OS. For Linux use ~/.config/mdnotes. For Windows and Mac use proper dirs.
-- When a command gets executed, run a CLI Setup to create the File.
+- When a command gets executed, run a CLI config to create the File.
 - We need a root Folder to store the notes.
 - We need a Repo to sync to (try it, it should be empty in first place?).
 - All other questions/settings that are needed
@@ -17,7 +17,7 @@ This document tracks the features planned for mdnotes - a command-line/TUI appli
 - Edit existing notes
 - Delete notes
 - List all notes/tasks
-- Search  by content or title
+- Find notes and tasks by content or title
 - Tag notes for organization
 - Notes with status and/or due date are considered tasks
 
@@ -46,11 +46,11 @@ This document tracks the features planned for mdnotes - a command-line/TUI appli
 ### User Interface
 - Command-line interface (CLI) for quick operations
   - Named 'mdn'.
-  - Should provide a fast command experience such as:
-  - mdn add 'Title' -- This should also be usable as mdn a
-  - mdn edit uuid -- mdn e -- This should open a Editor for editing. tag symlinks should get updated after closing. Also location if due/status is added Removed.
-  - all referneces to uuid should work, if a unique prefix is given, like in git commit hashes. If not unique, it should give us the selection.
-  - when listing or searching tasks/notes should be filterable by type.
+- Should provide a fast command experience such as:
+- mdn add 'Title' -- This should also be usable as mdn a
+- mdn edit uuid -- mdn e -- This should open a Editor for editing. tag symlinks should get updated after closing. Also location if due/status is added Removed.
+- all referneces to uuid should work, if a unique prefix is given, like in git commit hashes. If not unique, it should give us the selection.
+- when listing or finding tasks/notes should be filterable by type.
   - When adding/removing due or status (which needs fast commands like `mdn due <DATE/TIME> <ID>` and `mdn st <STATUS> <ID>`) we need to change dir.
   - Every Change should result in a commit.
 - Text-based User Interface (TUI) for interactive browsing
