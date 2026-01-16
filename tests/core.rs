@@ -167,7 +167,14 @@ fn find_searches_notes_and_tasks() {
     );
     run_with(
         &base,
-        &["add", "Second", "--body", "contains keyword", "--due", "2099-01-01"],
+        &[
+            "add",
+            "Second",
+            "--body",
+            "contains keyword",
+            "--due",
+            "2099-01-01",
+        ],
     );
     let results = run_with(&base, &["find", "keyword"]);
     assert_eq!(results[0], "Notes:");

@@ -16,13 +16,7 @@ pub fn run(args: ConfigArgs, mut setup: SetupOptions) -> MdResult<Vec<String>> {
     Ok(vec![
         format!("Config: {}", config_path(&setup).display()),
         format!("Root: {}", config.root.display()),
-        format!(
-            "Remote: {}",
-            config.remote.as_deref().unwrap_or("<unset>")
-        ),
-        format!(
-            "Editor: {}",
-            config.editor.as_deref().unwrap_or("<unset>")
-        ),
+        format!("Remote: {}", config.remote.as_deref().unwrap_or("<unset>")),
+        format!("Editor: {}", config.editor.as_deref().unwrap_or("<unset>")),
     ])
 }
