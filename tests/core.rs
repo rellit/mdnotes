@@ -92,6 +92,7 @@ fn due_command_sets_and_clears_due_dates() {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
         remote_override: None,
+        editor_override: None,
     })
     .unwrap();
     let notes = load_items(&config, ItemKind::Note).unwrap();
@@ -188,6 +189,7 @@ fn edit_restores_changed_id_to_filename_value() {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
         remote_override: None,
+        editor_override: None,
     })
     .unwrap();
     let notes = load_items(&config, ItemKind::Note).unwrap();

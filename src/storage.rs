@@ -8,9 +8,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 const HEADER_EXAMPLES: &str = "\
-# id: 00000000-0000-4000-8000-000000000000
-# title: Example Title
-# type: note|task
 # status: pending|completed
 # priority: low|medium|high
 # due: 2099-12-31
