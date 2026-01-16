@@ -42,8 +42,12 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
             item.tags = parse_tags(&tags);
         }
         if let Some(due) = args.due {
-            validate_due_inner(&due)?;
-            item.due = Some(due);
+            if due.trim().is_empty() {
+                item.due = None;
+            } else {
+                validate_due_inner(&due)?;
+                item.due = Some(due);
+            }
         }
         if let Some(priority) = args.priority {
             item.priority = Some(priority);
