@@ -70,6 +70,16 @@ pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     Ok(config)
 }
 
+pub fn save_config(opts: &SetupOptions, config: &Config) -> MdResult<()> {
+    let config_file = config_path(opts);
+    write_config(&config_file, config)?;
+    ensure_directories(&config.root)?;
+    if let Some(remote) = &config.remote {
+        ensure_remote_configured(&config.root, remote)?;
+    }
+    Ok(())
+}
+
 pub fn config_path(opts: &SetupOptions) -> PathBuf {
     config_home(opts).join(CONFIG_NAME)
 }

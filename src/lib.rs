@@ -5,6 +5,7 @@ pub mod git;
 pub mod models;
 pub mod storage;
 pub mod tags;
+pub mod tui;
 pub mod util;
 
 use clap::Parser;
