@@ -66,14 +66,15 @@ fn dispatch(cli: Cli) -> MdResult<Vec<String>> {
         root_override: cli.root_override.clone(),
         config_home: cli.config_home.clone(),
         remote_override: None,
+        editor_override: None,
     };
     match cli.command {
-        Commands::Setup { root, remote } => commands::setup::run(root, remote, setup_opts),
+        Commands::Config(args) => commands::config::run(args, setup_opts),
         Commands::Add(args) => commands::add::run(args, setup_opts),
         Commands::List(args) => commands::list::run(args, setup_opts),
         Commands::Delete { id } => commands::delete::run(id, setup_opts),
         Commands::Edit(args) => commands::edit::run(args, setup_opts),
-        Commands::Search { query } => commands::search::run(query, setup_opts),
+        Commands::Find(args) => commands::find::run(args, setup_opts),
         Commands::Complete { id } => commands::complete::run(id, true, setup_opts),
         Commands::Incomplete { id } => commands::complete::run(id, false, setup_opts),
         Commands::Show { id } => commands::show::run(id, setup_opts),
