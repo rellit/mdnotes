@@ -58,6 +58,7 @@ This document tracks the features planned for mdnotes - a command-line/TUI appli
   - Lets us browse Notes and Tasks in 2 'Tabs'.
   - Preview of selected Task/Node
   - Fast editing/tagging
+  - Due overview
 - Syntax highlighting for markdown in preview
 
 ### Cross-Platform Support

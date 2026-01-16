@@ -9,7 +9,7 @@ This file tracks implementation tasks for mdnotes.
 ### Setup
 - [x] Create `mdnrc` config file in platform-appropriate location and run setup on first command.
 - [x] Establish root folder for notes and initialize local git repository.
-- [ ] Implement sync with (initially empty) remote git repository.
+- [X] Implement sync with (initially empty) remote git repository.
 - [ ] Gather remaining required settings during setup.
 
 ### Note Management
@@ -39,6 +39,8 @@ This file tracks implementation tasks for mdnotes.
 ### User Interface
 - [x] Provide `mdn` CLI with short aliases and UUID-prefix support for commands (add/edit).
 - [ ] Build `mdnui` TUI with notes/tasks tabs, preview pane, fast editing/tagging, and markdown syntax highlighting.
+  - [ ] There should be fast fiultering by tags and for tasks also for status.
+  - [ ] An overview over pending tasks driven by theire due date should exist
 
 ### Cross-Platform Support
 - [ ] Validate support on Linux, macOS, and Windows (adjust symlink strategy as needed).
