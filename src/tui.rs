@@ -8,7 +8,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
 
 use crate::cli::{AddArgs, EditArgs};
 use crate::commands::{add, complete, edit};
@@ -73,6 +73,70 @@ impl ActiveTab {
     }
 }
 
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1]);
+    horizontal[1]
+}
+
+fn format_markdown(body: &str) -> Vec<Line<'static>> {
+    body.lines().map(highlight_line).collect()
+}
+
+fn highlight_line(line: &str) -> Line<'static> {
+    if line.trim().is_empty() {
+        return Line::from("");
+    }
+    if line.starts_with('#') {
+        return Line::from(Span::styled(
+            line.to_string(),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    if line.starts_with("- ") || line.starts_with("* ") {
+        return Line::from(Span::styled(
+            line.to_string(),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    let mut spans: Vec<Span> = Vec::new();
+    let mut in_code = false;
+    for (idx, part) in line.split('`').enumerate() {
+        if idx > 0 {
+            in_code = !in_code;
+        }
+        if part.is_empty() {
+            continue;
+        }
+        let mut style = Style::default();
+        if in_code {
+            style = style.fg(Color::LightBlue);
+        }
+        spans.push(Span::styled(part.to_string(), style));
+    }
+    if spans.is_empty() {
+        spans.push(Span::raw(line.to_string()));
+    }
+    Line::from(spans)
+}
+
 #[derive(Clone, Copy)]
 enum SettingsField {
     Root,
@@ -106,43 +170,297 @@ impl SettingsField {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FormField {
+    Title,
+    Tags,
+    Status,
+    Due,
+}
+
+impl FormField {
+    fn next(self) -> Self {
+        match self {
+            FormField::Title => FormField::Tags,
+            FormField::Tags => FormField::Status,
+            FormField::Status => FormField::Due,
+            FormField::Due => FormField::Title,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            FormField::Title => FormField::Due,
+            FormField::Tags => FormField::Title,
+            FormField::Status => FormField::Tags,
+            FormField::Due => FormField::Status,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            FormField::Title => "Title",
+            FormField::Tags => "Tags",
+            FormField::Status => "Status",
+            FormField::Due => "Due",
+        }
+    }
+}
+
+#[derive(Clone)]
+enum FormMode {
+    New,
+    Edit { id: String },
+}
+
+#[derive(Clone)]
+struct ItemForm {
+    mode: FormMode,
+    kind: ItemKind,
+    title: String,
+    tags: String,
+    status: Option<Status>,
+    due: String,
+    active: FormField,
+}
+
+impl ItemForm {
+    fn new(kind: ItemKind) -> Self {
+        Self {
+            mode: FormMode::New,
+            kind,
+            title: String::new(),
+            tags: String::new(),
+            status: if matches!(kind, ItemKind::Task) {
+                Some(Status::Pending)
+            } else {
+                None
+            },
+            due: String::new(),
+            active: FormField::Title,
+        }
+    }
+
+    fn from_item(item: &Item) -> Self {
+        Self {
+            mode: FormMode::Edit {
+                id: item.id.clone(),
+            },
+            kind: item.kind,
+            title: item.title.clone(),
+            tags: item.tags.join(", "),
+            status: item.status,
+            due: item.due.clone().unwrap_or_default(),
+            active: FormField::Title,
+        }
+    }
+
+    fn active_label(&self) -> &'static str {
+        self.active.label()
+    }
+
+    fn next_field(&mut self) {
+        self.active = self.active.next();
+    }
+
+    fn previous_field(&mut self) {
+        self.active = self.active.prev();
+    }
+
+    fn cycle_status(&mut self) {
+        self.status = match self.status {
+            None => Some(Status::Pending),
+            Some(Status::Pending) => Some(Status::Completed),
+            Some(Status::Completed) => None,
+        };
+    }
+
+    fn handle_input(&mut self, key: &KeyEvent) {
+        if self.active == FormField::Status {
+            match key.code {
+                KeyCode::Char('p') | KeyCode::Char('P') => self.status = Some(Status::Pending),
+                KeyCode::Char('c') | KeyCode::Char('C') => self.status = Some(Status::Completed),
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Backspace => self.status = None,
+                KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => self.cycle_status(),
+                _ => {}
+            }
+            return;
+        }
+        let target = match self.active {
+            FormField::Title => Some(&mut self.title),
+            FormField::Tags => Some(&mut self.tags),
+            FormField::Due => Some(&mut self.due),
+            FormField::Status => None,
+        };
+        if let Some(buffer) = target {
+            match key.code {
+                KeyCode::Backspace => {
+                    buffer.pop();
+                }
+                KeyCode::Char(c) => buffer.push(c),
+                _ => {}
+            }
+        }
+    }
+
+    fn value_for(&self, field: FormField) -> String {
+        match field {
+            FormField::Title => self.title.clone(),
+            FormField::Tags => {
+                if self.tags.trim().is_empty() {
+                    "<optional>".into()
+                } else {
+                    self.tags.clone()
+                }
+            }
+            FormField::Status => self
+                .status
+                .as_ref()
+                .map(|s| s.as_str().to_string())
+                .unwrap_or_else(|| "<none>".into()),
+            FormField::Due => {
+                if self.due.trim().is_empty() {
+                    "<optional>".into()
+                } else {
+                    self.due.clone()
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SortOption {
+    Title,
+    Due,
+    Status,
+}
+
+impl SortOption {
+    fn next(self) -> Self {
+        match self {
+            SortOption::Title => SortOption::Due,
+            SortOption::Due => SortOption::Status,
+            SortOption::Status => SortOption::Title,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            SortOption::Title => "title",
+            SortOption::Due => "due",
+            SortOption::Status => "status",
+        }
+    }
+}
+
+#[derive(Clone, Default)]
 enum InputMode {
     #[default]
     Normal,
-    NewItem {
-        kind: ItemKind,
+    Form(ItemForm),
+    Search {
         buffer: String,
     },
 }
 
 struct ListPane {
     kind: ItemKind,
+    all_items: Vec<Item>,
     items: Vec<Item>,
     state: ListState,
+    sort: SortOption,
+    status_filter: Option<Status>,
+    search_query: Option<String>,
 }
 
 impl ListPane {
     fn new(kind: ItemKind, items: Vec<Item>) -> Self {
         let mut pane = Self {
             kind,
+            all_items: items.clone(),
             items,
             state: ListState::default(),
+            sort: SortOption::Title,
+            status_filter: None,
+            search_query: None,
         };
-        if !pane.items.is_empty() {
-            pane.state.select(Some(0));
-        }
+        pane.apply_filters();
         pane
     }
 
     fn set_items(&mut self, items: Vec<Item>) {
-        self.items = items;
+        self.all_items = items;
+        self.apply_filters();
+    }
+
+    fn apply_filters(&mut self) {
+        let mut filtered = self.all_items.clone();
+        if let Some(filter_status) = &self.status_filter {
+            filtered.retain(|item| item.status.as_ref() == Some(filter_status));
+        }
+        if let Some(query) = &self.search_query {
+            let query_lower = query.to_lowercase();
+            filtered.retain(|item| {
+                item.title.to_lowercase().contains(&query_lower)
+                    || item
+                        .tags
+                        .iter()
+                        .any(|t| t.to_lowercase().contains(&query_lower))
+                    || item.body.to_lowercase().contains(&query_lower)
+            });
+        }
+        match self.sort {
+            SortOption::Title => {
+                filtered.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+            }
+            SortOption::Due => {
+                filtered.sort_by(|a, b| match (&a.due, &b.due) {
+                    (Some(ad), Some(bd)) => ad.cmp(bd),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                });
+            }
+            SortOption::Status => {
+                filtered.sort_by(|a, b| {
+                    let a_status = a.status.as_ref().map(|s| s.as_str()).unwrap_or("");
+                    let b_status = b.status.as_ref().map(|s| s.as_str()).unwrap_or("");
+                    a_status.cmp(b_status).then(a.title.cmp(&b.title))
+                });
+            }
+        }
+        self.items = filtered;
         if self.items.is_empty() {
             self.state.select(None);
         } else {
             let selected = self.state.selected().unwrap_or(0).min(self.items.len() - 1);
             self.state.select(Some(selected));
         }
+    }
+
+    fn cycle_sort(&mut self) {
+        self.sort = self.sort.next();
+        self.apply_filters();
+    }
+
+    fn cycle_status_filter(&mut self) {
+        if !matches!(self.kind, ItemKind::Task) {
+            self.status_filter = None;
+            self.apply_filters();
+            return;
+        }
+        self.status_filter = match self.status_filter {
+            None => Some(Status::Pending),
+            Some(Status::Pending) => Some(Status::Completed),
+            Some(Status::Completed) => None,
+        };
+        self.apply_filters();
+    }
+
+    fn set_search_query(&mut self, query: Option<String>) {
+        self.search_query = query;
+        self.apply_filters();
     }
 
     fn selected(&self) -> Option<&Item> {
@@ -197,10 +515,20 @@ impl ListPane {
                 ListItem::new(line)
             })
             .collect();
+        let mut title_parts = vec![self.kind.dir_name().to_string()];
+        title_parts.push(format!("sort: {}", self.sort.label()));
+        if let Some(filter) = &self.status_filter {
+            title_parts.push(format!("status: {}", filter.as_str()));
+        }
+        if let Some(query) = &self.search_query {
+            if !query.is_empty() {
+                title_parts.push(format!("search: {query}"));
+            }
+        }
         let list = List::new(items)
             .block(
                 Block::default()
-                    .title(self.kind.dir_name())
+                    .title(title_parts.join(" | "))
                     .borders(Borders::ALL),
             )
             .highlight_style(highlight)
@@ -348,7 +676,7 @@ impl App {
             settings: SettingsPane::from_config(&config),
             config,
             setup,
-            status: String::from("Use arrow keys to navigate, 'n' to add, 'e' to edit, Ctrl+S to save settings, q to quit."),
+            status: String::from("Use arrows to navigate. n add, e edit, c complete, / search, f filter, o sort, Enter to save edits, q to quit."),
             input_mode: InputMode::Normal,
             quitting: false,
         })
@@ -377,8 +705,10 @@ impl App {
                 Constraint::Length(3),
                 Constraint::Min(5),
                 Constraint::Length(3),
+                Constraint::Length(3),
             ])
             .split(frame.size());
+        let main_area = layout[1];
 
         let titles = ["Notes", "Tasks", "Settings"]
             .iter()
@@ -399,7 +729,7 @@ impl App {
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
                     .constraints([Constraint::Percentage(35), Constraint::Percentage(65)])
-                    .split(layout[1]);
+                    .split(main_area);
                 let highlight = Style::default().bg(Color::Blue).fg(Color::White);
                 match self.tab {
                     ActiveTab::Notes => self.notes.render(frame, chunks[0], highlight),
@@ -419,20 +749,30 @@ impl App {
             }
         }
 
-        let status = match &self.input_mode {
-            InputMode::NewItem { kind, buffer } => {
-                let target = match kind {
-                    ItemKind::Note => "note",
-                    ItemKind::Task => "task",
-                };
-                format!("New {target} title: {buffer}")
-            }
-            InputMode::Normal => self.status.clone(),
-        };
+        let status = self.status.clone();
         let status_widget = Paragraph::new(status)
             .block(Block::default().borders(Borders::ALL).title("Status"))
             .wrap(Wrap { trim: true });
         frame.render_widget(status_widget, layout[2]);
+
+        let commands_widget = self.commands_widget();
+        frame.render_widget(commands_widget, layout[3]);
+
+        match &self.input_mode {
+            InputMode::Form(form) => {
+                let area = centered_rect(70, 60, main_area);
+                frame.render_widget(Clear, area);
+                let form_widget = self.form_widget(form);
+                frame.render_widget(form_widget, area);
+            }
+            InputMode::Search { buffer } => {
+                let area = centered_rect(70, 30, main_area);
+                frame.render_widget(Clear, area);
+                let search_widget = self.search_widget(buffer);
+                frame.render_widget(search_widget, area);
+            }
+            InputMode::Normal => {}
+        }
     }
 
     fn preview_widget(&self) -> Paragraph<'_> {
@@ -442,24 +782,39 @@ impl App {
             ActiveTab::Settings => None,
         };
         if let Some(item) = selected {
-            let mut lines = Vec::new();
-            lines.push(Line::from(format!("# {}", item.title)));
+            let mut lines: Vec<Line> = Vec::new();
+            lines.push(Line::from(Span::styled(
+                format!("# {}", item.title),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )));
             if let Some(status) = &item.status {
-                lines.push(Line::from(format!("status: {}", status.as_str())));
+                lines.push(Line::from(vec![
+                    Span::styled("status: ", Style::default().fg(Color::Gray)),
+                    Span::styled(status.as_str(), Style::default().fg(Color::Yellow)),
+                ]));
             }
             if let Some(priority) = &item.priority {
-                lines.push(Line::from(format!("priority: {}", priority.as_str())));
+                lines.push(Line::from(vec![
+                    Span::styled("priority: ", Style::default().fg(Color::Gray)),
+                    Span::styled(priority.as_str(), Style::default().fg(Color::Green)),
+                ]));
             }
             if let Some(due) = &item.due {
-                lines.push(Line::from(format!("due: {due}")));
+                lines.push(Line::from(vec![
+                    Span::styled("due: ", Style::default().fg(Color::Gray)),
+                    Span::styled(due, Style::default().fg(Color::Magenta)),
+                ]));
             }
             if !item.tags.is_empty() {
-                lines.push(Line::from(format!("tags: {}", item.tags.join(", "))));
+                lines.push(Line::from(vec![
+                    Span::styled("tags: ", Style::default().fg(Color::Gray)),
+                    Span::styled(item.tags.join(", "), Style::default().fg(Color::LightBlue)),
+                ]));
             }
             lines.push(Line::from("--"));
-            for body_line in item.body.lines() {
-                lines.push(Line::from(body_line.to_string()));
-            }
+            lines.extend(format_markdown(&item.body));
             Paragraph::new(lines)
                 .block(Block::default().borders(Borders::ALL).title("Preview"))
                 .wrap(Wrap { trim: false })
@@ -470,10 +825,10 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> MdResult<()> {
-        if matches!(self.input_mode, InputMode::NewItem { .. }) {
-            self.handle_new_item_key(key)
-        } else {
-            self.handle_normal_key(key)
+        match &self.input_mode {
+            InputMode::Form(_) => self.handle_form_key(key),
+            InputMode::Search { .. } => self.handle_search_key(key),
+            InputMode::Normal => self.handle_normal_key(key),
         }
     }
 
@@ -488,11 +843,27 @@ impl App {
             KeyCode::Down => self.move_selection_down(),
             KeyCode::Char('r') => self.refresh_lists()?,
             KeyCode::Char('n') => self.start_new_item(),
-            KeyCode::Char('e') => self.edit_selected()?,
+            KeyCode::Char('e') => self.start_edit_form(),
             KeyCode::Char('c') => self.toggle_completion()?,
+            KeyCode::Char('f') => {
+                if !matches!(self.tab, ActiveTab::Settings) {
+                    self.toggle_filter();
+                }
+            }
+            KeyCode::Char('o') => {
+                if !matches!(self.tab, ActiveTab::Settings) {
+                    self.toggle_sort();
+                }
+            }
+            KeyCode::Char('/') => self.start_search(),
             KeyCode::Enter => {
                 if matches!(self.tab, ActiveTab::Settings) {
-                    self.settings.toggle_edit();
+                    if self.settings.editing {
+                        self.save_settings()?;
+                        self.settings.toggle_edit();
+                    } else {
+                        self.settings.toggle_edit();
+                    }
                 }
             }
             KeyCode::Esc => {
@@ -502,17 +873,17 @@ impl App {
             }
             _ => {
                 if matches!(self.tab, ActiveTab::Settings) {
-                    if key.modifiers.contains(KeyModifiers::CONTROL)
-                        && key.code == KeyCode::Char('s')
-                    {
-                        self.save_settings()?;
-                    } else {
-                        self.settings.handle_input(&key);
-                        match key.code {
-                            KeyCode::Up => self.settings.previous_field(),
-                            KeyCode::Down => self.settings.next_field(),
-                            _ => {}
+                    self.settings.handle_input(&key);
+                    match key.code {
+                        KeyCode::Up => self.settings.previous_field(),
+                        KeyCode::Down => self.settings.next_field(),
+                        KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            self.save_settings()?;
+                            if self.settings.editing {
+                                self.settings.toggle_edit();
+                            }
                         }
+                        _ => {}
                     }
                 }
             }
@@ -520,30 +891,45 @@ impl App {
         Ok(())
     }
 
-    fn handle_new_item_key(&mut self, key: KeyEvent) -> MdResult<()> {
-        if let InputMode::NewItem { kind, buffer } = &mut self.input_mode {
+    fn handle_form_key(&mut self, key: KeyEvent) -> MdResult<()> {
+        if let InputMode::Form(mut form) = self.input_mode.clone() {
             match key.code {
                 KeyCode::Esc => {
-                    self.status = "Cancelled new item".into();
+                    self.status = "Cancelled input".into();
                     self.input_mode = InputMode::Normal;
+                    return Ok(());
+                }
+                KeyCode::Tab => form.next_field(),
+                KeyCode::BackTab => form.previous_field(),
+                KeyCode::Enter => {
+                    self.submit_form(form)?;
+                    return Ok(());
+                }
+                _ => form.handle_input(&key),
+            }
+            self.input_mode = InputMode::Form(form);
+        }
+        Ok(())
+    }
+
+    fn handle_search_key(&mut self, key: KeyEvent) -> MdResult<()> {
+        if let InputMode::Search { mut buffer } = self.input_mode.clone() {
+            match key.code {
+                KeyCode::Esc => {
+                    self.input_mode = InputMode::Normal;
+                    return Ok(());
                 }
                 KeyCode::Backspace => {
                     buffer.pop();
                 }
                 KeyCode::Char(c) => buffer.push(c),
                 KeyCode::Enter => {
-                    let title = buffer.trim();
-                    if title.is_empty() {
-                        self.status = "Title cannot be empty".into();
-                    } else {
-                        let kind = kind.clone();
-                        let title_owned = title.to_string();
-                        self.create_item(kind, title_owned)?;
-                        self.input_mode = InputMode::Normal;
-                    }
+                    self.apply_search(buffer.trim());
+                    return Ok(());
                 }
                 _ => {}
             }
+            self.input_mode = InputMode::Search { buffer };
         }
         Ok(())
     }
@@ -573,55 +959,20 @@ impl App {
                 return;
             }
         };
-        self.input_mode = InputMode::NewItem {
-            kind,
-            buffer: String::new(),
-        };
+        self.input_mode = InputMode::Form(ItemForm::new(kind));
+        self.status = "Adding new item - press Enter to save".into();
     }
 
-    fn create_item(&mut self, kind: ItemKind, title: String) -> MdResult<()> {
-        let mut args = AddArgs {
-            title: title.clone(),
-            body: None,
-            due: None,
-            status: None,
-            priority: None,
-            tags: None,
-        };
-        if matches!(kind, ItemKind::Task) {
-            args.status = Some(Status::Pending);
-        }
-        add::run(args, self.setup.clone())?;
-        self.refresh_lists()?;
-        self.status = format!("Created {}", title);
-        Ok(())
-    }
-
-    fn edit_selected(&mut self) -> MdResult<()> {
+    fn start_edit_form(&mut self) {
         let selected = match self.tab {
             ActiveTab::Notes => self.notes.selected(),
             ActiveTab::Tasks => self.tasks.selected(),
             ActiveTab::Settings => None,
         };
         if let Some(item) = selected {
-            let id = item.id.clone();
-            let title = item.title.clone();
-            edit::run(
-                EditArgs {
-                    id,
-                    title: None,
-                    body: None,
-                    due: None,
-                    priority: None,
-                    status: None,
-                    tags: None,
-                },
-                self.setup.clone(),
-            )?;
-            self.refresh_lists()?;
-            self.status = format!("Edited {}", title);
+            self.input_mode = InputMode::Form(ItemForm::from_item(item));
+            self.status = "Editing item - press Enter to save".into();
         }
-        Ok(())
     }
 
     fn toggle_completion(&mut self) -> MdResult<()> {
@@ -639,6 +990,134 @@ impl App {
                 if completed { "completed" } else { "pending" }
             );
         }
+        Ok(())
+    }
+
+    fn toggle_filter(&mut self) {
+        match self.tab {
+            ActiveTab::Notes => self.notes.cycle_status_filter(),
+            ActiveTab::Tasks => self.tasks.cycle_status_filter(),
+            ActiveTab::Settings => return,
+        };
+        let status_text = match self.tab {
+            ActiveTab::Notes => self.notes.status_filter.as_ref().map(|s| s.as_str()),
+            ActiveTab::Tasks => self.tasks.status_filter.as_ref().map(|s| s.as_str()),
+            ActiveTab::Settings => None,
+        };
+        self.status = match status_text {
+            Some(s) => format!("Filter: {s}"),
+            None => "Filter cleared".into(),
+        };
+    }
+
+    fn toggle_sort(&mut self) {
+        match self.tab {
+            ActiveTab::Notes => self.notes.cycle_sort(),
+            ActiveTab::Tasks => self.tasks.cycle_sort(),
+            ActiveTab::Settings => {}
+        }
+        let label = match self.tab {
+            ActiveTab::Notes => self.notes.sort.label(),
+            ActiveTab::Tasks => self.tasks.sort.label(),
+            ActiveTab::Settings => "n/a",
+        };
+        self.status = format!("Sort: {label}");
+    }
+
+    fn start_search(&mut self) {
+        let buffer = match self.tab {
+            ActiveTab::Notes => self.notes.search_query.clone().unwrap_or_default(),
+            ActiveTab::Tasks => self.tasks.search_query.clone().unwrap_or_default(),
+            ActiveTab::Settings => String::new(),
+        };
+        if matches!(self.tab, ActiveTab::Settings) {
+            return;
+        }
+        self.input_mode = InputMode::Search { buffer };
+        self.status = "Search current list - Enter to apply".into();
+    }
+
+    fn apply_search(&mut self, query: &str) {
+        let trimmed = query.trim();
+        let query_opt = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+        match self.tab {
+            ActiveTab::Notes => self.notes.set_search_query(query_opt),
+            ActiveTab::Tasks => self.tasks.set_search_query(query_opt),
+            ActiveTab::Settings => {}
+        }
+        if trimmed.is_empty() {
+            self.status = "Search cleared".into();
+        } else {
+            self.status = format!("Searching for '{trimmed}'");
+        }
+        self.input_mode = InputMode::Normal;
+    }
+
+    fn submit_form(&mut self, form: ItemForm) -> MdResult<()> {
+        let title = form.title.trim();
+        if title.is_empty() {
+            self.status = "Title cannot be empty".into();
+            self.input_mode = InputMode::Form(form);
+            return Ok(());
+        }
+        let tags_value = form.tags.trim().to_string();
+        let clear_due = form.due.trim().is_empty();
+        let due_value = if clear_due {
+            None
+        } else {
+            match crate::util::validate_due_inner(form.due.trim()) {
+                Ok(val) => Some(val),
+                Err(err) => {
+                    self.status = err.0;
+                    self.input_mode = InputMode::Form(form);
+                    return Ok(());
+                }
+            }
+        };
+        match &form.mode {
+            FormMode::New => {
+                let mut args = AddArgs {
+                    title: title.to_string(),
+                    body: None,
+                    due: due_value.clone(),
+                    status: form.status,
+                    priority: None,
+                    tags: if tags_value.is_empty() {
+                        None
+                    } else {
+                        Some(tags_value.clone())
+                    },
+                };
+                if matches!(form.kind, ItemKind::Task) && args.status.is_none() {
+                    args.status = Some(Status::Pending);
+                }
+                add::run(args, self.setup.clone())?;
+                self.status = format!("Created {}", title);
+            }
+            FormMode::Edit { id } => {
+                let args = EditArgs {
+                    id: id.to_string(),
+                    title: Some(title.to_string()),
+                    body: None,
+                    due: if clear_due {
+                        Some(String::new())
+                    } else {
+                        due_value.clone()
+                    },
+                    priority: None,
+                    status: form.status,
+                    tags: Some(tags_value.clone()),
+                };
+                edit::run(args, self.setup.clone())?;
+                self.status = format!("Updated {}", title);
+            }
+        }
+        self.refresh_lists()?;
+        self.input_mode = InputMode::Normal;
         Ok(())
     }
 
@@ -665,5 +1144,70 @@ impl App {
         self.refresh_lists()?;
         self.status = "Settings saved".into();
         Ok(())
+    }
+
+    fn commands_widget(&self) -> Paragraph<'_> {
+        let text = match &self.input_mode {
+            InputMode::Form(form) => format!(
+                "[Enter] save • [Esc] cancel • [Tab/Shift+Tab] move • Editing {}",
+                form.active_label()
+            ),
+            InputMode::Search { .. } => "[Enter] apply search • [Esc] cancel • type to edit query"
+                .to_string(),
+            InputMode::Normal => match self.tab {
+                ActiveTab::Notes | ActiveTab::Tasks => {
+                    "↑/↓ move • ←/→ tabs • n new • e edit • c complete (tasks) • o sort • f filter • / search • r refresh • q quit".into()
+                }
+                ActiveTab::Settings => {
+                    "↑/↓ choose field • Enter edit/save • Esc cancel • Ctrl+S save • q quit".into()
+                }
+            },
+        };
+        Paragraph::new(text)
+            .block(Block::default().borders(Borders::ALL).title("Commands"))
+            .wrap(Wrap { trim: true })
+    }
+
+    fn form_widget(&self, form: &ItemForm) -> Paragraph<'_> {
+        let mut lines = Vec::new();
+        let title = match &form.mode {
+            FormMode::New => format!(
+                "New {}",
+                match form.kind {
+                    ItemKind::Note => "Note",
+                    ItemKind::Task => "Task",
+                }
+            ),
+            FormMode::Edit { .. } => "Edit Item".into(),
+        };
+        for field in [
+            FormField::Title,
+            FormField::Tags,
+            FormField::Status,
+            FormField::Due,
+        ] {
+            let value = form.value_for(field);
+            let content = format!("{}: {}", field.label(), value);
+            let mut style = Style::default();
+            if field == form.active {
+                style = style.fg(Color::Yellow).add_modifier(Modifier::BOLD);
+            }
+            lines.push(Line::from(Span::styled(content, style)));
+        }
+        lines.push(Line::from(""));
+        lines.push(Line::from(
+            "Status: cycle with arrows or p/c/n • Due format YYYY-MM-DD",
+        ));
+        Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title))
+    }
+
+    fn search_widget(&self, buffer: &str) -> Paragraph<'_> {
+        let mut lines = Vec::new();
+        lines.push(Line::from("Search current list (title, body, tags)"));
+        lines.push(Line::from(format!("Query: {buffer}")));
+        lines.push(Line::from("Enter to apply • empty to clear"));
+        Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title("Search"))
+            .wrap(Wrap { trim: true })
     }
 }

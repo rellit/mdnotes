@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Priority {
     Low,
     Medium,
@@ -18,7 +18,7 @@ impl Priority {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Status {
     Pending,
     Completed,
@@ -33,7 +33,7 @@ impl Status {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ItemKind {
     Note,
     Task,

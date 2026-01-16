@@ -22,7 +22,7 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
         || args.status.is_some();
     if !has_field_update {
         open_editor(&config, &path)?;
-        item = read_item(&path, original_kind.clone())?;
+        item = read_item(&path, original_kind)?;
         let path_id = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -42,8 +42,12 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
             item.tags = parse_tags(&tags);
         }
         if let Some(due) = args.due {
-            validate_due_inner(&due)?;
-            item.due = Some(due);
+            if due.trim().is_empty() {
+                item.due = None;
+            } else {
+                validate_due_inner(&due)?;
+                item.due = Some(due);
+            }
         }
         if let Some(priority) = args.priority {
             item.priority = Some(priority);
