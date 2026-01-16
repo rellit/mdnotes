@@ -1,53 +1,77 @@
 use crate::cli::EditArgs;
 use crate::config::{ensure_setup, SetupOptions};
 use crate::git::{sync_pull, sync_push};
-use crate::models::{ItemKind, Priority};
-use crate::storage::{resolve_item, write_item};
+use crate::models::{ItemKind, Status};
+use crate::storage::{read_item, resolve_item, write_item};
 use crate::tags::refresh_tag_links;
 use crate::util::{parse_tags, validate_due_inner};
 use crate::{MdError, MdResult};
+use std::fs;
+use std::process::Command;
 
 pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
     sync_pull(&config)?;
-    let (kind, path, mut item) = resolve_item(&config, &args.id)?;
-    if matches!(kind, ItemKind::Note)
-        && (args.priority.is_some() || args.due.is_some() || args.status.is_some())
-    {
-        return Err("Status, due date, and priority can only be set on tasks".into());
-    }
-    if let Some(title) = args.title {
-        item.title = title;
-    }
-    if let Some(body) = args.body {
-        item.body = body;
-    }
-    if let Some(tags) = args.tags {
-        item.tags = parse_tags(&tags);
-    }
-    if let Some(due) = args.due {
-        validate_due_inner(&due)?;
-        item.due = Some(due);
-    }
-    if let Some(priority) = args.priority {
-        ensure_priority_valid_for_kind(&kind, &priority)?;
-        item.priority = Some(priority);
-    }
-    if let Some(status) = args.status {
-        if !matches!(kind, ItemKind::Task) {
-            return Err(MdError("Status is only valid for tasks".into()));
+    let (original_kind, path, mut item) = resolve_item(&config, &args.id)?;
+    let has_field_update = args.title.is_some()
+        || args.body.is_some()
+        || args.tags.is_some()
+        || args.due.is_some()
+        || args.priority.is_some()
+        || args.status.is_some();
+    if !has_field_update {
+        open_editor(&path)?;
+        item = read_item(&path, original_kind.clone())?;
+    } else {
+        if let Some(title) = args.title {
+            item.title = title;
         }
-        item.status = Some(status);
+        if let Some(body) = args.body {
+            item.body = body;
+        }
+        if let Some(tags) = args.tags {
+            item.tags = parse_tags(&tags);
+        }
+        if let Some(due) = args.due {
+            validate_due_inner(&due)?;
+            item.due = Some(due);
+        }
+        if let Some(priority) = args.priority {
+            item.priority = Some(priority);
+        }
+        if let Some(status) = args.status {
+            item.status = Some(status);
+        }
     }
-    write_item(&config, &item)?;
+    item.kind = ItemKind::infer(&item.status, &item.due);
+    if matches!(item.kind, ItemKind::Task) && item.status.is_none() {
+        item.status = Some(Status::Pending);
+    }
+    let new_path = write_item(&config, &item)?;
+    if new_path != path {
+        fs::remove_file(path)?;
+    }
     refresh_tag_links(&config, &item)?;
     sync_push(&config, &format!("mdnotes: edit {}", item.id))?;
-    Ok(vec![format!("Updated {}", path.display())])
+    Ok(vec![format!("Updated {}", new_path.display())])
 }
 
-fn ensure_priority_valid_for_kind(kind: &ItemKind, _priority: &Priority) -> MdResult<()> {
-    if matches!(kind, ItemKind::Note) {
-        return Err("Priority is only allowed for tasks".into());
+fn open_editor(path: &std::path::Path) -> MdResult<()> {
+    let editor = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| {
+            if cfg!(target_os = "windows") {
+                "notepad".into()
+            } else {
+                "vi".into()
+            }
+        });
+    let status = Command::new(editor)
+        .arg(path)
+        .status()
+        .map_err(|e| MdError(e.to_string()))?;
+    if !status.success() {
+        return Err(MdError("Editor exited with an error".into()));
     }
     Ok(())
 }
