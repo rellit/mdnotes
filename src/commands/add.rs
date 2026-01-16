@@ -2,7 +2,7 @@ use crate::cli::AddArgs;
 use crate::config::{ensure_setup, SetupOptions};
 use crate::git::{sync_pull, sync_push};
 use crate::models::{Item, ItemKind, Status};
-use crate::storage::{write_item_with_examples};
+use crate::storage::write_item_with_examples;
 use crate::tags::refresh_tag_links;
 use crate::util::{parse_tags, validate_due_inner};
 use crate::MdResult;
