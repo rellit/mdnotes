@@ -31,9 +31,9 @@ fn run_with(base: &std::path::Path, args: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn setup_creates_directories_and_config() {
-    let base = temp_home("setup");
-    let output = run_with(&base, &["setup"]);
+fn config_creates_directories_and_config() {
+    let base = temp_home("config");
+    let output = run_with(&base, &["config"]);
     assert!(output.iter().any(|l| l.contains("Config:")));
     assert!(base.join("repo/notes").exists());
     assert!(base.join("repo/tasks").exists());
@@ -47,7 +47,7 @@ fn add_list_and_show_note() {
         &base,
         &["add", "My Note", "--body", "hello", "--tags", "rust,notes"],
     );
-    let list = run_with(&base, &["list", "notes"]);
+    let list = run_with(&base, &["list", "n"]);
     assert_eq!(list.len(), 1);
     let show = run_with(&base, &["show", list[0].split(' ').next().unwrap()]);
     assert!(show.iter().any(|l| l.contains("My Note")));
@@ -72,6 +72,7 @@ fn task_lifecycle_with_due_and_priority() {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
         remote_override: None,
+        editor_override: None,
     })
     .unwrap();
     let tasks = load_items(&config, ItemKind::Task).unwrap();
@@ -113,6 +114,7 @@ fn notes_allow_priority_without_becoming_tasks() {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
         remote_override: None,
+        editor_override: None,
     })
     .unwrap();
     let notes = load_items(&config, ItemKind::Note).unwrap();
@@ -151,6 +153,7 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
         root_override: Some(base.join("repo")),
         config_home: Some(base.join("config")),
         remote_override: None,
+        editor_override: None,
     })
     .unwrap();
     let notes = load_items(&config, ItemKind::Note).unwrap();
@@ -214,13 +217,33 @@ fn edit_restores_changed_id_to_filename_value() {
 }
 
 #[test]
-fn search_finds_note_by_title_and_body() {
-    let base = temp_home("search");
-    run_with(&base, &["add", "Alpha Note", "--body", "first body"]);
-    run_with(&base, &["add", "Second", "--body", "contains keyword"]);
-    let results = run_with(&base, &["search", "keyword"]);
-    assert_eq!(results.len(), 1);
-    assert!(results[0].contains("Second"));
+fn find_searches_notes_and_tasks() {
+    let base = temp_home("find");
+    run_with(
+        &base,
+        &["add", "Alpha Note", "--body", "first keyword body"],
+    );
+    run_with(
+        &base,
+        &[
+            "add",
+            "Second",
+            "--body",
+            "contains keyword",
+            "--due",
+            "2099-01-01",
+        ],
+    );
+    let results = run_with(&base, &["find", "keyword"]);
+    assert_eq!(results[0], "Notes:");
+    assert!(results[1].contains("Alpha Note"));
+    assert_eq!(results[2], "");
+    assert_eq!(results[3], "Tasks:");
+    assert!(results[4].contains("Second"));
+
+    let task_only = run_with(&base, &["find", "keyword", "t"]);
+    assert_eq!(task_only.len(), 1);
+    assert!(task_only[0].contains("Second"));
 }
 
 #[test]
@@ -236,10 +259,10 @@ fn delete_cleans_up_tags() {
 }
 
 #[test]
-fn setup_accepts_remote_and_sets_origin() {
-    let base = temp_home("setup_remote");
+fn config_accepts_remote_and_sets_origin() {
+    let base = temp_home("config_remote");
     let remote = "https://example.com/repo.git";
-    run_with(&base, &["setup", "--remote", remote]);
+    run_with(&base, &["config", "--remote", remote]);
     let config_contents = std::fs::read_to_string(base.join("config").join("mdnrc")).unwrap();
     assert!(config_contents.contains(remote));
     let origin = Command::new("git")

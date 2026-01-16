@@ -21,7 +21,7 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
         || args.priority.is_some()
         || args.status.is_some();
     if !has_field_update {
-        open_editor(&path)?;
+        open_editor(&config, &path)?;
         item = read_item(&path, original_kind.clone())?;
         let path_id = path
             .file_stem()
@@ -65,10 +65,13 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     Ok(vec![format!("Updated {}", new_path.display())])
 }
 
-fn open_editor(path: &std::path::Path) -> MdResult<()> {
-    let editor = std::env::var("VISUAL")
-        .or_else(|_| std::env::var("EDITOR"))
-        .unwrap_or_else(|_| {
+fn open_editor(config: &crate::config::Config, path: &std::path::Path) -> MdResult<()> {
+    let editor = config
+        .editor
+        .clone()
+        .or_else(|| std::env::var("VISUAL").ok())
+        .or_else(|| std::env::var("EDITOR").ok())
+        .unwrap_or_else(|| {
             if cfg!(target_os = "windows") {
                 "notepad".into()
             } else {

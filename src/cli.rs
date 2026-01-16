@@ -21,15 +21,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Initialize configuration and storage
-    Setup {
-        /// Optional custom root directory
-        #[arg(long)]
-        root: Option<PathBuf>,
-        /// Optional remote git repository url
-        #[arg(long)]
-        remote: Option<String>,
-    },
+    /// Show or update configuration
+    Config(ConfigArgs),
     /// Create a new note or task
     #[command(visible_alias = "a")]
     Add(AddArgs),
@@ -42,9 +35,9 @@ pub enum Commands {
     /// Edit an existing note or task
     #[command(visible_alias = "e")]
     Edit(EditArgs),
-    /// Search notes by content or title
-    #[command(visible_alias = "find")]
-    Search { query: String },
+    /// Search notes and tasks by content or title
+    #[command(visible_aliases = ["f", "search"])]
+    Find(FindArgs),
     /// Mark task complete
     #[command(visible_alias = "c")]
     Complete { id: String },
@@ -80,7 +73,9 @@ pub struct AddArgs {
 #[derive(ValueEnum, Clone, Debug)]
 pub enum ListTarget {
     All,
+    #[value(alias = "n")]
     Notes,
+    #[value(alias = "t")]
     Tasks,
 }
 
@@ -114,4 +109,29 @@ pub struct EditArgs {
     pub status: Option<Status>,
     #[arg(long)]
     pub tags: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ConfigArgs {
+    /// Optional custom root directory
+    #[arg(long)]
+    pub root: Option<PathBuf>,
+    /// Optional remote git repository url
+    #[arg(long)]
+    pub remote: Option<String>,
+    /// Optional editor to use when editing notes
+    #[arg(long)]
+    pub editor: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct FindArgs {
+    pub query: String,
+    #[arg(
+        value_enum,
+        value_name = "target",
+        help = "notes|tasks",
+        required = false
+    )]
+    pub target: Option<ListTarget>,
 }

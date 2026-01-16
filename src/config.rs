@@ -14,6 +14,7 @@ pub const ROOT_OVERRIDE_ENV: &str = "MDNOTES_ROOT";
 pub struct Config {
     pub root: PathBuf,
     pub remote: Option<String>,
+    pub editor: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -21,6 +22,7 @@ pub struct SetupOptions {
     pub root_override: Option<PathBuf>,
     pub config_home: Option<PathBuf>,
     pub remote_override: Option<String>,
+    pub editor_override: Option<String>,
 }
 
 pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
@@ -34,6 +36,10 @@ pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
         }
         if let Some(remote) = opts.remote_override {
             config.remote = Some(remote);
+            changed = true;
+        }
+        if let Some(editor) = opts.editor_override {
+            config.editor = Some(editor);
             changed = true;
         }
         if changed {
@@ -53,6 +59,7 @@ pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     let config = Config {
         root,
         remote: opts.remote_override.clone(),
+        editor: opts.editor_override.clone(),
     };
     write_config(&config_file, &config)?;
     ensure_directories(&config.root)?;
@@ -113,6 +120,9 @@ fn write_config(path: &Path, config: &Config) -> MdResult<()> {
     if let Some(remote) = &config.remote {
         writeln!(file, "remote={remote}")?;
     }
+    if let Some(editor) = &config.editor {
+        writeln!(file, "editor={editor}")?;
+    }
     Ok(())
 }
 
@@ -122,17 +132,23 @@ fn read_config(path: &Path) -> MdResult<Config> {
 
     let mut root: Option<PathBuf> = None;
     let mut remote: Option<String> = None;
+    let mut editor: Option<String> = None;
     for line in content.lines() {
         if let Some((key, value)) = line.split_once('=') {
             match key.trim() {
                 "root" => root = Some(PathBuf::from(value.trim())),
                 "remote" => remote = Some(value.trim().to_string()),
+                "editor" => editor = Some(value.trim().to_string()),
                 _ => {}
             }
         }
     }
     let root = root.ok_or_else(|| MdError("Invalid config: missing root".into()))?;
-    Ok(Config { root, remote })
+    Ok(Config {
+        root,
+        remote,
+        editor,
+    })
 }
 
 pub fn ensure_directories(root: &Path) -> MdResult<()> {
