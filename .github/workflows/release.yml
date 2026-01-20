@@ -90,7 +90,7 @@ jobs:
       if: runner.os != 'Windows'
       run: |
         cd target/${{ matrix.target }}/release
-        ls mdn mdnui
+        test -f mdn && test -f mdnui
         tar -czf ../../../${{ matrix.archive_name }} mdn mdnui
 
     - name: Create archive (Windows)
@@ -98,7 +98,7 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $dist = "target/${{ matrix.target }}/release"
-        Get-Item "$dist/mdn.exe","$dist/mdnui.exe"
+        if (-not (Test-Path "$dist/mdn.exe") -or -not (Test-Path "$dist/mdnui.exe")) { throw "Required binaries missing" }
         Compress-Archive -Path "$dist/mdn.exe","$dist/mdnui.exe" -DestinationPath "${{ matrix.archive_name }}"
 
     - name: Upload Release Asset
