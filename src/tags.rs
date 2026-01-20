@@ -65,10 +65,17 @@ fn create_symlink_atomic(target: &Path, link: &Path) -> MdResult<()> {
 }
 
 fn create_symlink(target: &Path, link: &Path) -> MdResult<()> {
-    #[cfg(target_os = "windows")]
-    {
-        std::os::windows::fs::symlink_file(target, link).map_err(|e| MdError(e.to_string()))
-    }
+#[cfg(target_os = "windows")]
+{
+        match std::os::windows::fs::symlink_file(target, link) {
+            Ok(()) => Ok(()),
+            Err(e) if e.raw_os_error() == Some(1314) => {
+                // Fallback for Windows systems without symlink privilege
+                fs::hard_link(target, link).map_err(|e| MdError(e.to_string()))
+            }
+            Err(e) => Err(MdError(e.to_string())),
+        }
+}
     #[cfg(not(target_os = "windows"))]
     {
         std::os::unix::fs::symlink(target, link).map_err(|e| MdError(e.to_string()))
