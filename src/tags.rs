@@ -3,6 +3,8 @@ use crate::models::Item;
 use crate::{MdError, MdResult};
 use std::fs;
 use std::path::Path;
+#[cfg(target_os = "windows")]
+use std::os::windows::fs as winfs;
 
 pub fn refresh_tag_links(config: &Config, item: &Item) -> MdResult<()> {
     let path = config
@@ -65,17 +67,20 @@ fn create_symlink_atomic(target: &Path, link: &Path) -> MdResult<()> {
 }
 
 fn create_symlink(target: &Path, link: &Path) -> MdResult<()> {
-#[cfg(target_os = "windows")]
-{
-        match std::os::windows::fs::symlink_file(target, link) {
+    #[cfg(target_os = "windows")]
+    {
+        // Windows ERROR_PRIVILEGE_NOT_HELD (1314) indicates missing SeCreateSymbolicLinkPrivilege.
+        const WINDOWS_ERROR_PRIVILEGE_NOT_HELD: i32 = 1314;
+        match winfs::symlink_file(target, link) {
             Ok(()) => Ok(()),
-            Err(e) if e.raw_os_error() == Some(1314) => {
-                // Fallback for Windows systems without symlink privilege
+            Err(e) if e.raw_os_error() == Some(WINDOWS_ERROR_PRIVILEGE_NOT_HELD) => {
+                // Fallback when symlinks are not permitted; hard links keep content available
+                // but won't mirror changes if the target is later replaced.
                 fs::hard_link(target, link).map_err(|e| MdError(e.to_string()))
             }
             Err(e) => Err(MdError(e.to_string())),
         }
-}
+    }
     #[cfg(not(target_os = "windows"))]
     {
         std::os::unix::fs::symlink(target, link).map_err(|e| MdError(e.to_string()))
