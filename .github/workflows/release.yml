@@ -83,13 +83,14 @@ jobs:
         toolchain: stable
         target: ${{ matrix.target }}
 
-    - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }} --bins
+    - name: Build release binaries
+      run: cargo build --release --target ${{ matrix.target }} --bin mdn --bin mdnui
 
     - name: Create archive (Unix)
       if: runner.os != 'Windows'
       run: |
         cd target/${{ matrix.target }}/release
+        ls mdn mdnui
         tar -czf ../../../${{ matrix.archive_name }} mdn mdnui
 
     - name: Create archive (Windows)
@@ -97,6 +98,7 @@ jobs:
       run: |
         $ErrorActionPreference = "Stop"
         $dist = "target/${{ matrix.target }}/release"
+        Get-Item "$dist/mdn.exe","$dist/mdnui.exe"
         Compress-Archive -Path "$dist/mdn.exe","$dist/mdnui.exe" -DestinationPath "${{ matrix.archive_name }}"
 
     - name: Upload Release Asset
