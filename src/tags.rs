@@ -10,11 +10,24 @@ pub fn refresh_tag_links(config: &Config, item: &Item) -> MdResult<()> {
         .join(item.kind.dir_name())
         .join(format!("{}.md", item.id));
     remove_tag_links(config, &path)?;
+    let relative = path
+        .strip_prefix(&config.root)
+        .map_err(|_| MdError("Failed to derive relative path".into()))?
+        .to_string_lossy()
+        .to_string();
+    let tags_dir = config.root.join("tags");
+    fs::create_dir_all(&tags_dir)?;
     for tag in &item.tags {
-        let dir = config.root.join("tags").join(tag);
-        fs::create_dir_all(&dir)?;
-        let link = dir.join(&item.id);
-        create_symlink_atomic(&path, &link)?;
+        let tag_file = tags_dir.join(tag);
+        let mut lines: Vec<String> = if tag_file.exists() {
+            fs::read_to_string(&tag_file)?.lines().map(|s| s.to_string()).collect()
+        } else {
+            Vec::new()
+        };
+        if !lines.iter().any(|l| l == &relative) {
+            lines.push(relative.clone());
+            fs::write(&tag_file, lines.join("\n") + "\n")?;
+        }
     }
     Ok(())
 }
@@ -24,53 +37,30 @@ pub fn remove_tag_links(config: &Config, path: &Path) -> MdResult<()> {
     if !tags_dir.exists() {
         return Ok(());
     }
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| MdError("Missing file stem".into()))?
+    let relative = path
+        .strip_prefix(&config.root)
+        .map_err(|_| MdError("Failed to derive relative path".into()))?
+        .to_string_lossy()
         .to_string();
     for entry in fs::read_dir(&tags_dir)? {
         let entry = entry?;
-        let tag_dir = entry.path();
-        if !tag_dir.is_dir() {
+        let tag_file = entry.path();
+        if !tag_file.is_file() {
             continue;
         }
-        let link_path = tag_dir.join(&stem);
-        if link_path.exists() {
-            fs::remove_file(&link_path)?;
-        }
-    }
-    // clean empty tag directories
-    for entry in fs::read_dir(&tags_dir)? {
-        let entry = entry?;
-        let tag_dir = entry.path();
-        if tag_dir.is_dir() && fs::read_dir(&tag_dir)?.next().is_none() {
-            fs::remove_dir(&tag_dir)?;
+        let mut lines: Vec<String> = fs::read_to_string(&tag_file)?
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
+        let original_len = lines.len();
+        lines.retain(|l| l != &relative);
+        if lines.len() != original_len {
+            if lines.is_empty() {
+                fs::remove_file(&tag_file)?;
+            } else {
+                fs::write(&tag_file, lines.join("\n") + "\n")?;
+            }
         }
     }
     Ok(())
-}
-
-fn create_symlink_atomic(target: &Path, link: &Path) -> MdResult<()> {
-    let tmp_link = link.with_extension("tmp_link");
-    if tmp_link.exists() {
-        fs::remove_file(&tmp_link)?;
-    }
-    create_symlink(target, &tmp_link)?;
-    if link.exists() {
-        fs::remove_file(link)?;
-    }
-    fs::rename(&tmp_link, link)?;
-    Ok(())
-}
-
-fn create_symlink(target: &Path, link: &Path) -> MdResult<()> {
-    #[cfg(target_os = "windows")]
-    {
-        std::os::windows::fs::symlink_file(target, link).map_err(|e| MdError(e.to_string()))
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::os::unix::fs::symlink(target, link).map_err(|e| MdError(e.to_string()))
-    }
 }

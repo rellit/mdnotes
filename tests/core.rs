@@ -275,8 +275,10 @@ fn delete_cleans_up_tags() {
     run_with(&base, &["add", "Tagged", "--tags", "one,two"]);
     let list = run_with(&base, &["list", "notes"]);
     let id = list[0].split(' ').next().unwrap().to_string();
-    let tag_one = base.join("repo/tags/one").join(&id);
+    let tag_one = base.join("repo/tags/one");
     assert!(tag_one.exists());
+    let content = std::fs::read_to_string(&tag_one).unwrap();
+    assert!(content.contains(&format!("notes/{}.md", id)));
     run_with(&base, &["delete", &id]);
     assert!(!tag_one.exists());
 }
