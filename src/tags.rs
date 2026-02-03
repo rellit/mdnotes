@@ -20,7 +20,10 @@ pub fn refresh_tag_links(config: &Config, item: &Item) -> MdResult<()> {
     for tag in &item.tags {
         let tag_file = tags_dir.join(tag);
         let mut lines: Vec<String> = if tag_file.exists() {
-            fs::read_to_string(&tag_file)?.lines().map(|s| s.to_string()).collect()
+            fs::read_to_string(&tag_file)?
+                .lines()
+                .map(|s| s.to_string())
+                .collect()
         } else {
             Vec::new()
         };
