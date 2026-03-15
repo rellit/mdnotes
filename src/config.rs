@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub const CONFIG_NAME: &str = "mdnrc";
+pub const MDN_FILE: &str = ".mdn";
 pub const DEFAULT_ROOT_DIR: &str = "repository";
 pub const CONFIG_OVERRIDE_ENV: &str = "MDNOTES_CONFIG_HOME";
 pub const ROOT_OVERRIDE_ENV: &str = "MDNOTES_ROOT";
@@ -25,7 +26,30 @@ pub struct SetupOptions {
     pub editor_override: Option<String>,
 }
 
+/// Searches for a `.mdn` file by traversing the current working directory upward.
+/// Returns the path of the first `.mdn` file found, or `None` if none exists.
+pub fn find_mdn_file() -> Option<PathBuf> {
+    let mut dir = env::current_dir().ok()?;
+    loop {
+        let candidate = dir.join(MDN_FILE);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => return None,
+        }
+    }
+}
+
 pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
+    // When no explicit test overrides are provided, check for a .mdn project file first.
+    if opts.config_home.is_none() && opts.root_override.is_none() {
+        if let Some(mdn_path) = find_mdn_file() {
+            return load_mdn_config(&mdn_path, &opts);
+        }
+    }
+
     let config_file = config_path(&opts);
     if config_file.exists() {
         let mut config = read_config(&config_file)?;
@@ -64,6 +88,48 @@ pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     write_config(&config_file, &config)?;
     ensure_directories(&config.root)?;
     initialize_git(&config.root)?;
+    if let Some(remote) = &config.remote {
+        ensure_remote_configured(&config.root, remote)?;
+    }
+    Ok(config)
+}
+
+/// Loads config from a `.mdn` file.  Relative `root` values are resolved
+/// relative to the directory containing the `.mdn` file.
+fn load_mdn_config(mdn_path: &Path, opts: &SetupOptions) -> MdResult<Config> {
+    let mdn_dir = mdn_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    let (raw_root, mut remote, mut editor) = parse_config_file(mdn_path)?;
+
+    // Default root to `repository` subdir of the .mdn file's directory when not specified.
+    let root_raw = raw_root.unwrap_or_else(|| PathBuf::from(DEFAULT_ROOT_DIR));
+    let root = if root_raw.is_relative() {
+        mdn_dir.join(root_raw)
+    } else {
+        root_raw
+    };
+
+    // Apply runtime overrides.
+    if let Some(r) = &opts.remote_override {
+        remote = Some(r.clone());
+    }
+    if let Some(e) = &opts.editor_override {
+        editor = Some(e.clone());
+    }
+
+    let config = Config {
+        root,
+        remote,
+        editor,
+    };
+
+    ensure_directories(&config.root)?;
+    if !config.root.join(".git").exists() {
+        initialize_git(&config.root)?;
+    }
     if let Some(remote) = &config.remote {
         ensure_remote_configured(&config.root, remote)?;
     }
@@ -137,6 +203,17 @@ fn write_config(path: &Path, config: &Config) -> MdResult<()> {
 }
 
 fn read_config(path: &Path) -> MdResult<Config> {
+    let (root, remote, editor) = parse_config_file(path)?;
+    let root = root.ok_or_else(|| MdError("Invalid config: missing root".into()))?;
+    Ok(Config {
+        root,
+        remote,
+        editor,
+    })
+}
+
+/// Parses a config or `.mdn` file and returns the raw optional fields.
+fn parse_config_file(path: &Path) -> MdResult<(Option<PathBuf>, Option<String>, Option<String>)> {
     let mut content = String::new();
     File::open(path)?.read_to_string(&mut content)?;
 
@@ -153,18 +230,11 @@ fn read_config(path: &Path) -> MdResult<Config> {
             }
         }
     }
-    let root = root.ok_or_else(|| MdError("Invalid config: missing root".into()))?;
-    Ok(Config {
-        root,
-        remote,
-        editor,
-    })
+    Ok((root, remote, editor))
 }
 
 pub fn ensure_directories(root: &Path) -> MdResult<()> {
-    fs::create_dir_all(root.join("notes"))?;
-    fs::create_dir_all(root.join("tasks"))?;
-    fs::create_dir_all(root.join("tags"))?;
+    fs::create_dir_all(root)?;
     Ok(())
 }
 

@@ -14,7 +14,7 @@ use crate::cli::{AddArgs, EditArgs};
 use crate::commands::{add, complete, edit};
 use crate::config::{ensure_setup, save_config, Config, SetupOptions};
 use crate::models::{Item, ItemKind, Status};
-use crate::storage::load_items;
+use crate::storage::load_all_items;
 use crate::{MdError, MdResult};
 
 pub fn run_tui(setup: SetupOptions) -> MdResult<()> {
@@ -504,7 +504,7 @@ impl ListPane {
                     meta.push(format!("due {due}"));
                 }
                 if let Some(priority) = &item.priority {
-                    meta.push(format!("prio {}", priority.as_str()));
+                    meta.push(format!("prio {priority}"));
                 }
                 let mut line = item.title.clone();
                 if !meta.is_empty() {
@@ -533,7 +533,7 @@ impl ListPane {
             )
             .highlight_style(highlight)
             .highlight_symbol("▶ ");
-        let mut state = self.state.clone();
+        let mut state = self.state;
         frame.render_stateful_widget(list, area, &mut state);
     }
 }
@@ -667,8 +667,9 @@ struct App {
 
 impl App {
     fn new(config: Config, setup: SetupOptions) -> MdResult<Self> {
-        let notes = load_items(&config, ItemKind::Note)?;
-        let tasks = load_items(&config, ItemKind::Task)?;
+        let all = load_all_items(&config)?;
+        let notes: Vec<Item> = all.iter().filter(|i| !i.is_task()).cloned().collect();
+        let tasks: Vec<Item> = all.into_iter().filter(|i| i.is_task()).collect();
         Ok(Self {
             tab: ActiveTab::Notes,
             notes: ListPane::new(ItemKind::Note, notes),
@@ -707,7 +708,7 @@ impl App {
                 Constraint::Length(3),
                 Constraint::Length(3),
             ])
-            .split(frame.size());
+            .split(frame.area());
         let main_area = layout[1];
 
         let titles = ["Notes", "Tasks", "Settings"]
@@ -798,7 +799,7 @@ impl App {
             if let Some(priority) = &item.priority {
                 lines.push(Line::from(vec![
                     Span::styled("priority: ", Style::default().fg(Color::Gray)),
-                    Span::styled(priority.as_str(), Style::default().fg(Color::Green)),
+                    Span::styled(priority.to_string(), Style::default().fg(Color::Green)),
                 ]));
             }
             if let Some(due) = &item.due {
@@ -1123,8 +1124,9 @@ impl App {
 
     fn refresh_lists(&mut self) -> MdResult<()> {
         self.config = ensure_setup(self.setup.clone())?;
-        let notes = load_items(&self.config, ItemKind::Note)?;
-        let tasks = load_items(&self.config, ItemKind::Task)?;
+        let all = load_all_items(&self.config)?;
+        let notes: Vec<Item> = all.iter().filter(|i| !i.is_task()).cloned().collect();
+        let tasks: Vec<Item> = all.into_iter().filter(|i| i.is_task()).collect();
         self.notes.set_items(notes);
         self.tasks.set_items(tasks);
         Ok(())

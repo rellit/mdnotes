@@ -11,10 +11,12 @@ keywords = ["notes", "tasks", "cli", "tui", "markdown"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-uuid = { version = "1.19.0", features = ["v4"] }
-clap = { version = "4.5.13", features = ["derive"] }
-ratatui = { version = "0.26.3", default-features = false, features = ["crossterm"] }
-crossterm = "0.27"
+uuid = { version = "1.22.0", features = ["v4"] }
+clap = { version = "4.6.0", features = ["derive"] }
+ratatui = { version = "0.30.0", default-features = false, features = [
+    "crossterm",
+] }
+crossterm = "0.29.0"
 
 [profile.release]
 strip = true

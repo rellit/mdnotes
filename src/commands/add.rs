@@ -1,6 +1,6 @@
 use crate::cli::AddArgs;
 use crate::config::{ensure_setup, SetupOptions};
-use crate::git::{sync_pull, sync_push};
+use crate::git::sync_push;
 use crate::models::{Item, ItemKind, Status};
 use crate::storage::write_item_with_examples;
 use crate::tags::refresh_tag_links;
@@ -10,7 +10,6 @@ use uuid::Uuid;
 
 pub fn run(args: AddArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
-    sync_pull(&config)?;
     let mut item = Item {
         id: Uuid::new_v4().to_string(),
         title: args.title,

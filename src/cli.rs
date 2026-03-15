@@ -1,7 +1,7 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-use crate::models::{Priority, Status};
+use crate::models::Status;
 use crate::util::validate_due;
 
 #[derive(Parser, Debug)]
@@ -26,7 +26,7 @@ pub enum Commands {
     /// Create a new note or task
     #[command(visible_alias = "a")]
     Add(AddArgs),
-    /// List notes or tasks
+    /// List items, optionally filtered by a query string
     #[command(visible_aliases = ["ls", "l"])]
     List(ListArgs),
     /// Delete a note or task by id/prefix
@@ -35,9 +35,6 @@ pub enum Commands {
     /// Edit an existing note or task
     #[command(visible_alias = "e")]
     Edit(EditArgs),
-    /// Search notes and tasks by content or title
-    #[command(visible_aliases = ["f", "search"])]
-    Find(FindArgs),
     /// Mark task complete
     #[command(visible_alias = "c")]
     Complete { id: String },
@@ -53,6 +50,11 @@ pub enum Commands {
     /// Show full item content
     #[command(visible_aliases = ["sh", "s"])]
     Show { id: String },
+    /// Set item priority
+    #[command(visible_alias = "p")]
+    Priority(PriorityArgs),
+    /// Sync with remote (pull then push)
+    Sync,
 }
 
 #[derive(Args, Debug)]
@@ -64,34 +66,35 @@ pub struct AddArgs {
     pub due: Option<String>,
     #[arg(long, value_enum)]
     pub status: Option<Status>,
-    #[arg(long, value_enum)]
-    pub priority: Option<Priority>,
+    #[arg(long)]
+    pub priority: Option<u32>,
     #[arg(long)]
     pub tags: Option<String>,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-pub enum ListTarget {
-    All,
-    #[value(alias = "n")]
-    Notes,
-    #[value(alias = "t")]
-    Tasks,
-}
-
+/// Arguments for the `list` command.
+///
+/// The optional query string uses an infix filter language with standard
+/// operator precedence (`not` > `and` > `or`).  Parentheses are supported.
+///
+///   `.task`           – item has a due date (is a task)
+///   `#<tag>`          – item has the given tag
+///   `prio:<n>`        – item priority equals n
+///   `prio:><n>`       – item priority is greater than n
+///   `prio:<<n>`       – item priority is less than n
+///   `due:<yyyymmdd>`  – item due date equals (8-digit compact or YYYY-MM-DD)
+///   `due:><yyyymmdd>` – item due date is after
+///   `due:<<yyyymmdd>` – item due date is before
+///   `and`             – logical AND (infix)
+///   `or`              – logical OR (infix)
+///   `not`             – logical NOT (prefix)
+///
+/// Examples: `.task and #urgent`, `(.task or #note) and prio:>3`
 #[derive(Args, Debug)]
 pub struct ListArgs {
-    #[arg(
-        value_enum,
-        value_name = "target",
-        help = "notes|tasks",
-        required = false
-    )]
-    pub target: Option<ListTarget>,
-    #[arg(long, value_enum)]
-    pub status: Option<Status>,
-    #[arg(long, value_enum)]
-    pub priority: Option<Priority>,
+    /// Optional query string to filter items (e.g. ".task and #ui")
+    #[arg(value_name = "query", required = false)]
+    pub query: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -103,8 +106,8 @@ pub struct EditArgs {
     pub body: Option<String>,
     #[arg(long, value_parser = validate_due)]
     pub due: Option<String>,
-    #[arg(long, value_enum)]
-    pub priority: Option<Priority>,
+    #[arg(long)]
+    pub priority: Option<u32>,
     #[arg(long, value_enum)]
     pub status: Option<Status>,
     #[arg(long)]
@@ -125,13 +128,9 @@ pub struct ConfigArgs {
 }
 
 #[derive(Args, Debug)]
-pub struct FindArgs {
-    pub query: String,
-    #[arg(
-        value_enum,
-        value_name = "target",
-        help = "notes|tasks",
-        required = false
-    )]
-    pub target: Option<ListTarget>,
+pub struct PriorityArgs {
+    /// Item id or prefix
+    pub id: String,
+    /// Priority value (higher = more important); omit to clear
+    pub value: Option<u32>,
 }
