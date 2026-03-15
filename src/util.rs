@@ -14,10 +14,36 @@ pub fn validate_due(raw: &str) -> Result<String, String> {
     }
 }
 
+/// Returns the shortest prefix of `id` that is unique among `all_ids`.
+/// Falls back to the full `id` if no shorter prefix is unique.
+pub fn shortest_unique_prefix(id: &str, all_ids: &[String]) -> String {
+    for len in 1..=id.len() {
+        let prefix = &id[..len];
+        if all_ids
+            .iter()
+            .filter(|other| other.as_str().starts_with(prefix))
+            .count()
+            == 1
+        {
+            return prefix.to_string();
+        }
+    }
+    id.to_string()
+}
+
 pub fn validate_due_inner(raw: &str) -> MdResult<String> {
-    let parts: Vec<&str> = raw.split('-').collect();
+    // Accept compact YYYYMMDD by inserting dashes.
+    let normalized;
+    let s: &str = if raw.len() == 8 && raw.bytes().all(|b| b.is_ascii_digit()) {
+        normalized = format!("{}-{}-{}", &raw[..4], &raw[4..6], &raw[6..]);
+        &normalized
+    } else {
+        raw
+    };
+
+    let parts: Vec<&str> = s.split('-').collect();
     if parts.len() != 3 {
-        return Err("Due date must be in YYYY-MM-DD format".into());
+        return Err("Due date must be in YYYY-MM-DD or YYYYMMDD format".into());
     }
     let year = parts[0]
         .parse::<i32>()
@@ -48,5 +74,5 @@ pub fn validate_due_inner(raw: &str) -> MdResult<String> {
     if day == 0 || day > max_day {
         return Err("Day is out of range for the given month".into());
     }
-    Ok(raw.to_string())
+    Ok(s.to_string())
 }
