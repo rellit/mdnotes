@@ -40,6 +40,7 @@ pub enum ItemKind {
 }
 
 impl ItemKind {
+    /// Display label used in the TUI and list headers.
     pub fn dir_name(&self) -> &'static str {
         match self {
             ItemKind::Note => "notes",
@@ -47,8 +48,10 @@ impl ItemKind {
         }
     }
 
-    pub fn infer(status: &Option<Status>, due: &Option<String>) -> ItemKind {
-        if status.is_some() || due.is_some() {
+    /// Infers the kind of an item from its metadata.
+    /// An item is a task if and only if it has a due date.
+    pub fn infer(_status: &Option<Status>, due: &Option<String>) -> ItemKind {
+        if due.is_some() {
             ItemKind::Task
         } else {
             ItemKind::Note
@@ -66,6 +69,13 @@ pub struct Item {
     pub status: Option<Status>,
     pub priority: Option<Priority>,
     pub due: Option<String>,
+}
+
+impl Item {
+    /// Returns `true` when this item has a due date, which makes it a task.
+    pub fn is_task(&self) -> bool {
+        self.due.is_some()
+    }
 }
 
 impl fmt::Display for Item {

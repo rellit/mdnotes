@@ -6,13 +6,12 @@ use crate::storage::{read_item, resolve_item, write_item};
 use crate::tags::refresh_tag_links;
 use crate::util::{parse_tags, validate_due_inner};
 use crate::{MdError, MdResult};
-use std::fs;
 use std::process::Command;
 
 pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
     sync_pull(&config)?;
-    let (original_kind, path, mut item) = resolve_item(&config, &args.id)?;
+    let (path, mut item) = resolve_item(&config, &args.id)?;
     let original_id = item.id.clone();
     let has_field_update = args.title.is_some()
         || args.body.is_some()
@@ -22,10 +21,12 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
         || args.status.is_some();
     if !has_field_update {
         open_editor(&config, &path)?;
-        item = read_item(&path, original_kind)?;
+        item = read_item(&path)?;
+        // The canonical ID is the name of the UUID directory, not the file content
         let path_id = path
-            .file_stem()
-            .and_then(|s| s.to_str())
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
             .unwrap_or(&original_id)
             .to_string();
         if item.id != path_id {
@@ -60,13 +61,10 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     if matches!(item.kind, ItemKind::Task) && item.status.is_none() {
         item.status = Some(Status::Pending);
     }
-    let new_path = write_item(&config, &item)?;
-    if new_path != path {
-        fs::remove_file(path)?;
-    }
+    write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
     sync_push(&config, &format!("mdnotes: edit {}", item.id))?;
-    Ok(vec![format!("Updated {}", new_path.display())])
+    Ok(vec![format!("Updated {}/{}/MAIN.md", config.root.display(), item.id)])
 }
 
 fn open_editor(config: &crate::config::Config, path: &std::path::Path) -> MdResult<()> {

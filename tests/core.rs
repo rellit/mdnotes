@@ -1,7 +1,7 @@
 use mdnotes::config::{ensure_setup, save_config, SetupOptions};
 use mdnotes::git::sync_pull;
-use mdnotes::models::{ItemKind, Status};
-use mdnotes::storage::{load_items, resolve_item};
+use mdnotes::models::Status;
+use mdnotes::storage::{load_all_items, load_items, resolve_item};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -56,9 +56,11 @@ fn config_creates_directories_and_config() {
     let base = temp_home("config");
     let output = run_with(&base, &["config"]);
     assert!(output.iter().any(|l| l.contains("Config:")));
-    assert!(base.join("repo/notes").exists());
-    assert!(base.join("repo/tasks").exists());
-    assert!(base.join("repo/tags").exists());
+    // The root directory should exist; no notes/tasks/tags subdirs are created upfront
+    assert!(base.join("repo").exists());
+    assert!(!base.join("repo/notes").exists());
+    assert!(!base.join("repo/tasks").exists());
+    assert!(!base.join("repo/tags").exists());
 }
 
 #[test]
@@ -68,9 +70,15 @@ fn add_list_and_show_note() {
         &base,
         &["add", "My Note", "--body", "hello", "--tags", "rust,notes"],
     );
-    let list = run_with(&base, &["list", "n"]);
+    // List all items (no filter)
+    let list = run_with(&base, &["list"]);
     assert_eq!(list.len(), 1);
-    let show = run_with(&base, &["show", list[0].split(' ').next().unwrap()]);
+    assert!(list[0].contains("My Note"));
+    // List only tasks: note has no due date, so list should be empty
+    let tasks_only = run_with(&base, &["list", ".task"]);
+    assert_eq!(tasks_only.len(), 0);
+    let id = list[0].split(' ').next().unwrap();
+    let show = run_with(&base, &["show", id]);
     assert!(show.iter().any(|l| l.contains("My Note")));
     assert!(show.iter().any(|l| l.contains("rust")));
 }
@@ -96,12 +104,13 @@ fn task_lifecycle_with_due_and_priority() {
         editor_override: None,
     })
     .unwrap();
-    let tasks = load_items(&config, ItemKind::Task).unwrap();
+    let tasks = load_all_items(&config).unwrap();
     assert_eq!(tasks.len(), 1);
+    assert!(tasks[0].is_task());
     assert_eq!(tasks[0].status, Some(Status::Pending));
     let id = tasks[0].id.clone();
     run_with(&base, &["complete", &id]);
-    let (_k, _p, updated) = resolve_item(&config, &id).unwrap();
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
     assert_eq!(updated.status, Some(Status::Completed));
 }
 
@@ -116,16 +125,19 @@ fn due_command_sets_and_clears_due_dates() {
         editor_override: None,
     })
     .unwrap();
-    let notes = load_items(&config, ItemKind::Note).unwrap();
-    let id = notes[0].id.clone();
+    let all = load_all_items(&config).unwrap();
+    assert_eq!(all.len(), 1);
+    assert!(!all[0].is_task());
+    let id = all[0].id.clone();
     run_with(&base, &["due", &id, "2099-02-02"]);
-    let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
     assert_eq!(updated.due, Some("2099-02-02".into()));
-    assert_eq!(updated.kind, ItemKind::Task);
+    assert!(updated.is_task());
     assert_eq!(updated.status, Some(Status::Pending));
     run_with(&base, &["due", &id]);
-    let (_kind2, _p2, cleared) = resolve_item(&config, &id).unwrap();
+    let (_p2, cleared) = resolve_item(&config, &id).unwrap();
     assert_eq!(cleared.due, None);
+    assert!(!cleared.is_task());
 }
 
 #[test]
@@ -139,14 +151,15 @@ fn notes_allow_priority_without_becoming_tasks() {
         editor_override: None,
     })
     .unwrap();
-    let notes = load_items(&config, ItemKind::Note).unwrap();
-    assert_eq!(notes.len(), 1);
-    assert_eq!(notes[0].priority, Some(mdnotes::Priority::High));
+    let all = load_all_items(&config).unwrap();
+    assert_eq!(all.len(), 1);
+    assert!(!all[0].is_task());
+    assert_eq!(all[0].priority, Some(mdnotes::Priority::High));
 }
 
 #[test]
-fn list_separates_notes_and_tasks_when_no_target() {
-    let base = temp_home("list_all");
+fn list_items_with_query_filter() {
+    let base = temp_home("list_query");
     run_with(&base, &["add", "Note One"]);
     run_with(
         &base,
@@ -159,16 +172,76 @@ fn list_separates_notes_and_tasks_when_no_target() {
             "low",
         ],
     );
-    let list = run_with(&base, &["list"]);
-    assert_eq!(list[0], "Notes:");
-    assert!(list[1].contains("Note One"));
-    assert_eq!(list[2], "");
-    assert_eq!(list[3], "Tasks:");
-    assert!(list[4].contains("Task One"));
+    // No filter: both items returned
+    let all = run_with(&base, &["list"]);
+    assert_eq!(all.len(), 2);
+
+    // Filter: only tasks
+    let tasks = run_with(&base, &["list", ".task"]);
+    assert_eq!(tasks.len(), 1);
+    assert!(tasks[0].contains("Task One"));
+
+    // Filter: only notes (not tasks)
+    let notes = run_with(&base, &["list", ".task not"]);
+    assert_eq!(notes.len(), 1);
+    assert!(notes[0].contains("Note One"));
+
+    // Filter by priority
+    let low_prio = run_with(&base, &["list", "prio:low"]);
+    assert_eq!(low_prio.len(), 1);
+    assert!(low_prio[0].contains("Task One"));
 }
 
 #[test]
-fn edit_without_fields_opens_editor_and_reclassifies() {
+fn list_query_tag_filter() {
+    let base = temp_home("list_tags");
+    run_with(&base, &["add", "Tagged Note", "--tags", "alpha"]);
+    run_with(&base, &["add", "Other Note"]);
+
+    let tagged = run_with(&base, &["list", "#alpha"]);
+    assert_eq!(tagged.len(), 1);
+    assert!(tagged[0].contains("Tagged Note"));
+}
+
+#[test]
+fn list_query_due_filter() {
+    let base = temp_home("list_due");
+    run_with(&base, &["add", "Early Task", "--due", "2099-01-01"]);
+    run_with(&base, &["add", "Late Task", "--due", "2099-12-31"]);
+
+    // due:> 2099-06-01 → only Late Task
+    let late = run_with(&base, &["list", "due:>20990601"]);
+    assert_eq!(late.len(), 1);
+    assert!(late[0].contains("Late Task"));
+
+    // due:< 2099-06-01 → only Early Task
+    let early = run_with(&base, &["list", "due:<20990601"]);
+    assert_eq!(early.len(), 1);
+    assert!(early[0].contains("Early Task"));
+}
+
+#[test]
+fn list_query_and_or() {
+    let base = temp_home("list_bool");
+    run_with(
+        &base,
+        &["add", "Alpha Task", "--due", "2099-01-01", "--tags", "alpha"],
+    );
+    run_with(&base, &["add", "Beta Task", "--due", "2099-06-01"]);
+    run_with(&base, &["add", "Alpha Note", "--tags", "alpha"]);
+
+    // .task #alpha and → tasks with tag alpha
+    let t = run_with(&base, &["list", ".task #alpha and"]);
+    assert_eq!(t.len(), 1);
+    assert!(t[0].contains("Alpha Task"));
+
+    // .task #alpha or → tasks OR items with tag alpha
+    let t = run_with(&base, &["list", ".task #alpha or"]);
+    assert_eq!(t.len(), 3);
+}
+
+#[test]
+fn edit_without_fields_opens_editor_and_sets_due() {
     let base = temp_home("edit_editor");
     run_with(&base, &["add", "Draft"]);
     let config = ensure_setup(SetupOptions {
@@ -178,15 +251,13 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
         editor_override: None,
     })
     .unwrap();
-    let notes = load_items(&config, ItemKind::Note).unwrap();
-    let id = notes[0].id.clone();
-    let note_path = base.join("repo/notes").join(format!("{}.md", id));
-    let mut content = std::fs::read_to_string(&note_path).unwrap();
-    content = content.replace(
-        "type: note\n",
-        "type: note\nstatus: pending\ndue: 2099-05-01\n",
-    );
-    std::fs::write(&note_path, content).unwrap();
+    let all = load_all_items(&config).unwrap();
+    let id = all[0].id.clone();
+    let main_path = base.join("repo").join(&id).join("MAIN.md");
+    let mut content = std::fs::read_to_string(&main_path).unwrap();
+    // Add a due date directly to the file to simulate editor adding it
+    content = content.replace("--\n", "due: 2099-05-01\nstatus: pending\n--\n");
+    std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
     std::env::set_var("EDITOR", "true");
     run_with(&base, &["edit", &id]);
@@ -195,11 +266,11 @@ fn edit_without_fields_opens_editor_and_reclassifies() {
     } else {
         std::env::remove_var("EDITOR");
     }
-    assert!(!note_path.exists());
-    let task_path = base.join("repo/tasks").join(format!("{}.md", id));
-    assert!(task_path.exists());
-    let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
-    assert_eq!(updated.kind, ItemKind::Task);
+    // File should still be in the same UUID directory
+    assert!(main_path.exists());
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
+    assert!(updated.is_task());
+    assert_eq!(updated.due, Some("2099-05-01".into()));
 }
 
 #[test]
@@ -213,13 +284,13 @@ fn edit_restores_changed_id_to_filename_value() {
         editor_override: None,
     })
     .unwrap();
-    let notes = load_items(&config, ItemKind::Note).unwrap();
-    let id = notes[0].id.clone();
+    let all = load_all_items(&config).unwrap();
+    let id = all[0].id.clone();
     let new_id = "manually-changed-id";
-    let note_path = base.join("repo/notes").join(format!("{}.md", id));
-    let mut content = std::fs::read_to_string(&note_path).unwrap();
+    let main_path = base.join("repo").join(&id).join("MAIN.md");
+    let mut content = std::fs::read_to_string(&main_path).unwrap();
     content = content.replace(&format!("id: {}", id), &format!("id: {}", new_id));
-    std::fs::write(&note_path, content).unwrap();
+    std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
     std::env::set_var("EDITOR", "true");
     run_with(&base, &["edit", &id]);
@@ -228,19 +299,16 @@ fn edit_restores_changed_id_to_filename_value() {
     } else {
         std::env::remove_var("EDITOR");
     }
-    assert!(note_path.exists());
-    assert!(!base
-        .join("repo/notes")
-        .join(format!("{}.md", new_id))
-        .exists());
-    let (_kind, _p, updated) = resolve_item(&config, &id).unwrap();
+    // The UUID dir and file should still exist with the original id
+    assert!(main_path.exists());
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
     assert_eq!(updated.id, id);
-    let updated_content = std::fs::read_to_string(&note_path).unwrap();
+    let updated_content = std::fs::read_to_string(&main_path).unwrap();
     assert!(updated_content.contains(&format!("id: {}", id)));
 }
 
 #[test]
-fn find_searches_notes_and_tasks() {
+fn find_searches_all_items() {
     let base = temp_home("find");
     run_with(
         &base,
@@ -257,30 +325,34 @@ fn find_searches_notes_and_tasks() {
             "2099-01-01",
         ],
     );
+    // find without target: all items matching the query, flat list
     let results = run_with(&base, &["find", "keyword"]);
-    assert_eq!(results[0], "Notes:");
-    assert!(results[1].contains("Alpha Note"));
-    assert_eq!(results[2], "");
-    assert_eq!(results[3], "Tasks:");
-    assert!(results[4].contains("Second"));
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().any(|r| r.contains("Alpha Note")));
+    assert!(results.iter().any(|r| r.contains("Second")));
 
+    // find with tasks target
     let task_only = run_with(&base, &["find", "keyword", "t"]);
     assert_eq!(task_only.len(), 1);
     assert!(task_only[0].contains("Second"));
+
+    // find with notes target
+    let notes_only = run_with(&base, &["find", "keyword", "n"]);
+    assert_eq!(notes_only.len(), 1);
+    assert!(notes_only[0].contains("Alpha Note"));
 }
 
 #[test]
-fn delete_cleans_up_tags() {
+fn delete_removes_item_directory() {
     let base = temp_home("delete");
     run_with(&base, &["add", "Tagged", "--tags", "one,two"]);
-    let list = run_with(&base, &["list", "notes"]);
+    let list = run_with(&base, &["list"]);
     let id = list[0].split(' ').next().unwrap().to_string();
-    let tag_one = base.join("repo/tags/one");
-    assert!(tag_one.exists());
-    let content = std::fs::read_to_string(&tag_one).unwrap();
-    assert!(content.contains(&format!("notes/{}.md", id)));
+    let item_dir = base.join("repo").join(&id);
+    assert!(item_dir.exists());
     run_with(&base, &["delete", &id]);
-    assert!(!tag_one.exists());
+    assert!(!item_dir.exists());
+    // No more tag index files to check since indexing is removed
 }
 
 #[test]
@@ -399,3 +471,24 @@ fn save_config_persists_settings() {
     );
     assert_eq!(reloaded.editor.as_deref(), Some("nano"));
 }
+
+#[test]
+fn load_items_filters_by_kind() {
+    let base = temp_home("load_items_kind");
+    run_with(&base, &["add", "Plain Note"]);
+    run_with(&base, &["add", "A Task", "--due", "2099-03-15"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let notes = load_items(&config, mdnotes::ItemKind::Note).unwrap();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].title, "Plain Note");
+    let tasks = load_items(&config, mdnotes::ItemKind::Task).unwrap();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0].title, "A Task");
+}
+
