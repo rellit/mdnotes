@@ -15,6 +15,10 @@ pub struct Cli {
     #[arg(long, hide = true)]
     pub root_override: Option<PathBuf>,
 
+    /// Show full item IDs instead of shortened unique prefixes
+    #[arg(long)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }

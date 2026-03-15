@@ -424,11 +424,18 @@ fn list_query_priority_range() {
 fn delete_removes_item_directory() {
     let base = temp_home("delete");
     run_with(&base, &["add", "Tagged", "--tags", "one,two"]);
-    let list = run_with(&base, &["list"]);
-    let id = list[0].split(' ').next().unwrap().to_string();
-    let item_dir = base.join("repo").join(&id);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    let full_id = all[0].id.clone();
+    let item_dir = base.join("repo").join(&full_id);
     assert!(item_dir.exists());
-    run_with(&base, &["delete", &id]);
+    run_with(&base, &["delete", &full_id]);
     assert!(!item_dir.exists());
 }
 
@@ -704,4 +711,102 @@ fn find_mdn_file_traverses_upward() {
     // a .mdn exists in an ancestor is tested implicitly through integration.
     // Here we confirm the API is accessible.
     let _ = find_mdn_file; // ensure it's exported
+}
+
+#[test]
+fn validate_due_accepts_compact_yyyymmdd() {
+    // YYYYMMDD compact form should be accepted and stored as YYYY-MM-DD.
+    let base = temp_home("compact_due");
+    run_with(&base, &["add", "Compact Task", "--due", "20991231"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    assert_eq!(all.len(), 1);
+    // Compact form should be normalised to dashed form.
+    assert_eq!(all[0].due, Some("2099-12-31".into()));
+    assert!(all[0].is_task());
+}
+
+#[test]
+fn due_command_accepts_compact_yyyymmdd() {
+    // The `due` subcommand should also accept YYYYMMDD and store YYYY-MM-DD.
+    let base = temp_home("compact_due_cmd");
+    run_with(&base, &["add", "Schedule Later"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    let id = all[0].id.clone();
+    run_with(&base, &["due", &id, "20990202"]);
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
+    assert_eq!(updated.due, Some("2099-02-02".into()));
+}
+
+#[test]
+fn list_ids_are_shortened_and_verbose_shows_full() {
+    let base = temp_home("short_ids");
+    run_with(&base, &["add", "Alpha Note"]);
+    run_with(&base, &["add", "Beta Note"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+
+    // Default list: displayed IDs are unique prefixes (may be shorter than full UUID).
+    let list = run_with(&base, &["list"]);
+    assert_eq!(list.len(), 2);
+    for line in &list {
+        let display_id = line.split(' ').next().unwrap();
+        // The prefix must match exactly one item.
+        let matching: Vec<_> = all
+            .iter()
+            .filter(|i| i.id.starts_with(display_id))
+            .collect();
+        assert_eq!(
+            matching.len(),
+            1,
+            "display id '{display_id}' should resolve to exactly one item"
+        );
+        // The displayed prefix should be no longer than the full UUID.
+        assert!(display_id.len() <= matching[0].id.len());
+        // The prefix should actually work as a resolve target.
+        resolve_item(&config, display_id).expect("shortened id should resolve via prefix matching");
+    }
+
+    // With --verbose, displayed IDs must be the full UUIDs.
+    let verbose_list = {
+        let config_home = base.join("config").to_string_lossy().into_owned();
+        let root_override = base.join("repo").to_string_lossy().into_owned();
+        mdnotes::run_with_args([
+            "mdn",
+            "--verbose",
+            "--config-home",
+            &config_home,
+            "--root-override",
+            &root_override,
+            "list",
+        ])
+        .expect("verbose list should succeed")
+    };
+    assert_eq!(verbose_list.len(), 2);
+    for line in &verbose_list {
+        let display_id = line.split(' ').next().unwrap();
+        assert!(
+            all.iter().any(|i| i.id == display_id),
+            "verbose display id '{display_id}' should be a full UUID"
+        );
+    }
 }

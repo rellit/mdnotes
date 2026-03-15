@@ -984,7 +984,7 @@ impl App {
         if let Some(item) = self.tasks.selected() {
             let completed = !matches!(item.status, Some(Status::Completed));
             let id = item.id.clone();
-            complete::run(id.clone(), completed, self.setup.clone())?;
+            complete::run(id.clone(), completed, self.setup.clone(), false)?;
             self.refresh_lists()?;
             self.status = format!(
                 "Task {} marked {}",

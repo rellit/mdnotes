@@ -196,7 +196,32 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
     })
 }
 
-/// Finds an item whose UUID directory name starts with `prefix`.
+/// Returns all item IDs (directory names) present in the root, without
+/// parsing the contents of each item file.  This is cheaper than
+/// [`load_all_items`] and is used to compute shortest unique prefixes.
+pub fn list_item_ids(config: &Config) -> MdResult<Vec<String>> {
+    let root = &config.root;
+    let mut ids = Vec::new();
+    if !root.exists() {
+        return Ok(ids);
+    }
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let dir_path = entry.path();
+        if !dir_path.is_dir() {
+            continue;
+        }
+        let name = dir_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !name.starts_with('.') && find_main_md(&dir_path).is_some() {
+            ids.push(name);
+        }
+    }
+    Ok(ids)
+}
+
 /// Returns `(path_to_main.md, item)`.
 pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> {
     let mut matches: Vec<PathBuf> = Vec::new();
