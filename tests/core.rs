@@ -278,12 +278,13 @@ fn edit_without_fields_opens_editor_and_sets_due() {
     }
     std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
-    // SAFETY: single-threaded test, no concurrent env access
+    // SAFETY: EDITOR is only read by the child process spawned inside run_with;
+    // no other thread in this process reads it concurrently during this test.
     unsafe {
         std::env::set_var("EDITOR", "true");
     }
     run_with(&base, &["edit", &id]);
-    // SAFETY: single-threaded test, no concurrent env access
+    // SAFETY: same rationale as above; restoring the previous value after the child exits.
     unsafe {
         if let Some(prev) = prev_editor {
             std::env::set_var("EDITOR", prev);
