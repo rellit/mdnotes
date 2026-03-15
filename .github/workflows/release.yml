@@ -39,10 +39,10 @@ jobs:
           Automated release v${{ steps.get_version.outputs.version }}
           
           ## Downloads
-          - Windows: mdn-windows-x86_64.exe
-          - Linux: mdn-linux-x86_64
-          - macOS (Intel): mdn-macos-x86_64
-          - macOS (Apple Silicon): mdn-macos-aarch64
+          - Windows: mdnotes-windows-x86_64.zip (mdn.exe, mdnui.exe)
+          - Linux: mdnotes-linux-x86_64.tar.gz (mdn, mdnui)
+          - macOS (Intel): mdnotes-macos-x86_64.tar.gz (mdn, mdnui)
+          - macOS (Apple Silicon): mdnotes-macos-aarch64.tar.gz (mdn, mdnui)
         draft: false
         prerelease: false
 
@@ -59,23 +59,19 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             name: Linux x86_64
-            artifact_name: mdn
-            asset_name: mdn-linux-x86_64
+            archive_name: mdnotes-linux-x86_64.tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: Windows x86_64
-            artifact_name: mdn.exe
-            asset_name: mdn-windows-x86_64.exe
+            archive_name: mdnotes-windows-x86_64.zip
           - os: macos-latest
             target: x86_64-apple-darwin
             name: macOS x86_64
-            artifact_name: mdn
-            asset_name: mdn-macos-x86_64
+            archive_name: mdnotes-macos-x86_64.tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             name: macOS ARM64
-            artifact_name: mdn
-            asset_name: mdn-macos-aarch64
+            archive_name: mdnotes-macos-aarch64.tar.gz
 
     steps:
     - name: Checkout code
@@ -87,8 +83,26 @@ jobs:
         toolchain: stable
         target: ${{ matrix.target }}
 
-    - name: Build release binary
-      run: cargo build --release --target ${{ matrix.target }}
+    - name: Build release binaries
+      run: cargo build --release --target ${{ matrix.target }} --bin mdn --bin mdnui
+
+    - name: Create archive (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd target/${{ matrix.target }}/release
+        ([ -f mdn ] && [ -f mdnui ]) || { echo "Missing binaries: mdn or mdnui"; exit 1; }
+        tar -czf ../../../${{ matrix.archive_name }} mdn mdnui
+
+    - name: Create archive (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        $ErrorActionPreference = "Stop"
+        $dist = "target/${{ matrix.target }}/release"
+        $missing = @()
+        if (-not (Test-Path "$dist/mdn.exe")) { $missing += "mdn.exe" }
+        if (-not (Test-Path "$dist/mdnui.exe")) { $missing += "mdnui.exe" }
+        if ($missing.Count -gt 0) { throw "Missing binaries: $($missing -join ', ')" }
+        Compress-Archive -Path "$dist/mdn.exe","$dist/mdnui.exe" -DestinationPath "${{ matrix.archive_name }}"
 
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
@@ -96,6 +110,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ needs.create-release.outputs.upload_url }}
-        asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-        asset_name: ${{ matrix.asset_name }}
+        asset_path: ./${{ matrix.archive_name }}
+        asset_name: ${{ matrix.archive_name }}
         asset_content_type: application/octet-stream
