@@ -8,20 +8,32 @@ pub enum Predicate {
     All,
     /// Matches items that are tasks (have a due date).
     IsTask,
+    /// Matches items that have at least one tag.
+    Tagged,
     /// Matches items that have the given tag.
     HasTag(String),
+    /// Matches items whose title contains the given substring (case-insensitive).
+    TitleContains(String),
     /// Matches items whose priority equals the given value.
     PrioEq(u32),
     /// Matches items whose priority is greater than the given value.
     PrioGt(u32),
+    /// Matches items whose priority is greater than or equal to the given value.
+    PrioGe(u32),
     /// Matches items whose priority is less than the given value.
     PrioLt(u32),
+    /// Matches items whose priority is less than or equal to the given value.
+    PrioLe(u32),
     /// Matches items whose due date equals the given value (stored as YYYY-MM-DD).
     DueIs(String),
     /// Matches items whose due date is after the given value.
     DueAfter(String),
+    /// Matches items whose due date is on or after the given value.
+    DueOnOrAfter(String),
     /// Matches items whose due date is before the given value.
     DueBefore(String),
+    /// Matches items whose due date is on or before the given value.
+    DueOnOrBefore(String),
     /// Logical AND of two predicates.
     And(Box<Predicate>, Box<Predicate>),
     /// Logical OR of two predicates.
@@ -36,20 +48,37 @@ impl Predicate {
         match self {
             Predicate::All => true,
             Predicate::IsTask => item.is_task(),
+            Predicate::Tagged => !item.tags.is_empty(),
             Predicate::HasTag(tag) => item.tags.iter().any(|t| t == tag),
+            Predicate::TitleContains(s) => item
+                .title
+                .to_lowercase()
+                .contains(s.to_lowercase().as_str()),
             Predicate::PrioEq(p) => item.priority == Some(*p),
             Predicate::PrioGt(p) => item.priority.map(|v| v > *p).unwrap_or(false),
+            Predicate::PrioGe(p) => item.priority.map(|v| v >= *p).unwrap_or(false),
             Predicate::PrioLt(p) => item.priority.map(|v| v < *p).unwrap_or(false),
+            Predicate::PrioLe(p) => item.priority.map(|v| v <= *p).unwrap_or(false),
             Predicate::DueIs(d) => item.due.as_deref() == Some(d.as_str()),
             Predicate::DueAfter(d) => item
                 .due
                 .as_ref()
                 .map(|id| id.as_str() > d.as_str())
                 .unwrap_or(false),
+            Predicate::DueOnOrAfter(d) => item
+                .due
+                .as_ref()
+                .map(|id| id.as_str() >= d.as_str())
+                .unwrap_or(false),
             Predicate::DueBefore(d) => item
                 .due
                 .as_ref()
                 .map(|id| id.as_str() < d.as_str())
+                .unwrap_or(false),
+            Predicate::DueOnOrBefore(d) => item
+                .due
+                .as_ref()
+                .map(|id| id.as_str() <= d.as_str())
                 .unwrap_or(false),
             Predicate::And(a, b) => a.matches(item) && b.matches(item),
             Predicate::Or(a, b) => a.matches(item) || b.matches(item),
@@ -145,13 +174,36 @@ fn parse_leaf_token(token: &str) -> MdResult<Predicate> {
     if token == ".task" {
         return Ok(Predicate::IsTask);
     }
+    if token == "tagged" {
+        return Ok(Predicate::Tagged);
+    }
     if let Some(tag) = token.strip_prefix('#') {
         if tag.is_empty() {
             return Err(MdError("Tag name after '#' cannot be empty".into()));
         }
         return Ok(Predicate::HasTag(tag.to_string()));
     }
+    if let Some(title_str) = token.strip_prefix("title:") {
+        if title_str.is_empty() {
+            return Err(MdError(
+                "Title substring after 'title:' cannot be empty".into(),
+            ));
+        }
+        return Ok(Predicate::TitleContains(title_str.to_string()));
+    }
     if let Some(prio_str) = token.strip_prefix("prio:") {
+        if let Some(rest) = prio_str.strip_prefix(">=") {
+            let n = rest
+                .parse::<u32>()
+                .map_err(|_| MdError(format!("Invalid priority number: '{rest}'")))?;
+            return Ok(Predicate::PrioGe(n));
+        }
+        if let Some(rest) = prio_str.strip_prefix("<=") {
+            let n = rest
+                .parse::<u32>()
+                .map_err(|_| MdError(format!("Invalid priority number: '{rest}'")))?;
+            return Ok(Predicate::PrioLe(n));
+        }
         if let Some(rest) = prio_str.strip_prefix('>') {
             let n = rest
                 .parse::<u32>()
@@ -170,6 +222,12 @@ fn parse_leaf_token(token: &str) -> MdResult<Predicate> {
         return Ok(Predicate::PrioEq(n));
     }
     if let Some(due_str) = token.strip_prefix("due:") {
+        if let Some(rest) = due_str.strip_prefix(">=") {
+            return Ok(Predicate::DueOnOrAfter(normalize_due_date(rest)));
+        }
+        if let Some(rest) = due_str.strip_prefix("<=") {
+            return Ok(Predicate::DueOnOrBefore(normalize_due_date(rest)));
+        }
         if let Some(rest) = due_str.strip_prefix('>') {
             return Ok(Predicate::DueAfter(normalize_due_date(rest)));
         }
@@ -184,14 +242,16 @@ fn parse_leaf_token(token: &str) -> MdResult<Predicate> {
 /// Parses a query string into a `Predicate` using an infix expression parser.
 ///
 /// Tokens are space-separated.  Operators use standard infix notation:
-/// - Filter tokens: `.task`, `#<tag>`, `prio:<n>`, `prio:><n>`, `prio:<<n>`,
-///   `due:<yyyymmdd>`, `due:><yyyymmdd>`, `due:<<yyyymmdd>`
+/// - Filter tokens: `.task`, `tagged`, `#<tag>`, `title:<substring>`,
+///   `prio:<n>`, `prio:><n>`, `prio:>=<n>`, `prio:<<n>`, `prio:<=<n>`,
+///   `due:<yyyymmdd>`, `due:><yyyymmdd>`, `due:>=<yyyymmdd>`,
+///   `due:<<yyyymmdd>`, `due:<=<yyyymmdd>`
 /// - `and` – logical AND (lower precedence than `not`, higher than `or`)
 /// - `or`  – logical OR (lowest precedence)
 /// - `not` – logical NOT (prefix, highest precedence)
 /// - `(` / `)` – grouping; may be attached to adjacent tokens
 ///
-/// Example: `.task and #urgent`, `(.task or #note) and prio:>3`
+/// Example: `.task and #urgent`, `(.task or #note) and prio:>=3`
 ///
 /// An empty query returns [`Predicate::All`].
 pub fn parse_query(query: &str) -> MdResult<Predicate> {
