@@ -1,4 +1,4 @@
-use crate::models::{Item, Priority};
+use crate::models::Item;
 use crate::{MdError, MdResult};
 
 /// A composable predicate for filtering items.
@@ -11,7 +11,11 @@ pub enum Predicate {
     /// Matches items that have the given tag.
     HasTag(String),
     /// Matches items whose priority equals the given value.
-    PrioIs(Priority),
+    PrioEq(u32),
+    /// Matches items whose priority is greater than the given value.
+    PrioGt(u32),
+    /// Matches items whose priority is less than the given value.
+    PrioLt(u32),
     /// Matches items whose due date equals the given value (stored as YYYY-MM-DD).
     DueIs(String),
     /// Matches items whose due date is after the given value.
@@ -33,7 +37,9 @@ impl Predicate {
             Predicate::All => true,
             Predicate::IsTask => item.is_task(),
             Predicate::HasTag(tag) => item.tags.iter().any(|t| t == tag),
-            Predicate::PrioIs(p) => item.priority.as_ref() == Some(p),
+            Predicate::PrioEq(p) => item.priority == Some(*p),
+            Predicate::PrioGt(p) => item.priority.map(|v| v > *p).unwrap_or(false),
+            Predicate::PrioLt(p) => item.priority.map(|v| v < *p).unwrap_or(false),
             Predicate::DueIs(d) => item.due.as_deref() == Some(d.as_str()),
             Predicate::DueAfter(d) => item
                 .due
@@ -52,17 +58,140 @@ impl Predicate {
     }
 }
 
-/// Parses a query string into a `Predicate` using a stack-based (postfix) evaluator.
+/// Tokenises a query string.  Parentheses are split off from adjacent tokens so
+/// that `(.task and #foo)` becomes `["(", ".task", "and", "#foo", ")"]`.
+fn tokenize(query: &str) -> Vec<String> {
+    let spaced = query.replace('(', " ( ").replace(')', " ) ");
+    spaced.split_whitespace().map(|s| s.to_string()).collect()
+}
+
+struct Parser {
+    tokens: Vec<String>,
+    pos: usize,
+}
+
+impl Parser {
+    fn new(tokens: Vec<String>) -> Self {
+        Parser { tokens, pos: 0 }
+    }
+
+    fn peek(&self) -> Option<&str> {
+        self.tokens.get(self.pos).map(|s| s.as_str())
+    }
+
+    fn consume(&mut self) -> Option<&str> {
+        let tok = self.tokens.get(self.pos).map(|s| s.as_str());
+        if tok.is_some() {
+            self.pos += 1;
+        }
+        tok
+    }
+
+    /// or_expr := and_expr ('or' and_expr)*
+    fn parse_or(&mut self) -> MdResult<Predicate> {
+        let mut left = self.parse_and()?;
+        while self.peek() == Some("or") {
+            self.consume();
+            let right = self.parse_and()?;
+            left = Predicate::Or(Box::new(left), Box::new(right));
+        }
+        Ok(left)
+    }
+
+    /// and_expr := not_expr ('and' not_expr)*
+    fn parse_and(&mut self) -> MdResult<Predicate> {
+        let mut left = self.parse_not()?;
+        while self.peek() == Some("and") {
+            self.consume();
+            let right = self.parse_not()?;
+            left = Predicate::And(Box::new(left), Box::new(right));
+        }
+        Ok(left)
+    }
+
+    /// not_expr := 'not' not_expr | primary
+    fn parse_not(&mut self) -> MdResult<Predicate> {
+        if self.peek() == Some("not") {
+            self.consume();
+            let inner = self.parse_not()?;
+            return Ok(Predicate::Not(Box::new(inner)));
+        }
+        self.parse_primary()
+    }
+
+    /// primary := '(' or_expr ')' | leaf
+    fn parse_primary(&mut self) -> MdResult<Predicate> {
+        if self.peek() == Some("(") {
+            self.consume(); // consume '('
+            let inner = self.parse_or()?;
+            if self.peek() != Some(")") {
+                return Err(MdError("Expected ')' to close parenthesis".into()));
+            }
+            self.consume(); // consume ')'
+            return Ok(inner);
+        }
+        self.parse_leaf()
+    }
+
+    fn parse_leaf(&mut self) -> MdResult<Predicate> {
+        let token = self
+            .consume()
+            .ok_or_else(|| MdError("Unexpected end of query".into()))?;
+        parse_leaf_token(token)
+    }
+}
+
+fn parse_leaf_token(token: &str) -> MdResult<Predicate> {
+    if token == ".task" {
+        return Ok(Predicate::IsTask);
+    }
+    if let Some(tag) = token.strip_prefix('#') {
+        if tag.is_empty() {
+            return Err(MdError("Tag name after '#' cannot be empty".into()));
+        }
+        return Ok(Predicate::HasTag(tag.to_string()));
+    }
+    if let Some(prio_str) = token.strip_prefix("prio:") {
+        if let Some(rest) = prio_str.strip_prefix('>') {
+            let n = rest
+                .parse::<u32>()
+                .map_err(|_| MdError(format!("Invalid priority number: '{rest}'")))?;
+            return Ok(Predicate::PrioGt(n));
+        }
+        if let Some(rest) = prio_str.strip_prefix('<') {
+            let n = rest
+                .parse::<u32>()
+                .map_err(|_| MdError(format!("Invalid priority number: '{rest}'")))?;
+            return Ok(Predicate::PrioLt(n));
+        }
+        let n = prio_str
+            .parse::<u32>()
+            .map_err(|_| MdError(format!("Invalid priority number: '{prio_str}'")))?;
+        return Ok(Predicate::PrioEq(n));
+    }
+    if let Some(due_str) = token.strip_prefix("due:") {
+        if let Some(rest) = due_str.strip_prefix('>') {
+            return Ok(Predicate::DueAfter(normalize_due_date(rest)));
+        }
+        if let Some(rest) = due_str.strip_prefix('<') {
+            return Ok(Predicate::DueBefore(normalize_due_date(rest)));
+        }
+        return Ok(Predicate::DueIs(normalize_due_date(due_str)));
+    }
+    Err(MdError(format!("Unknown filter token: '{token}'")))
+}
+
+/// Parses a query string into a `Predicate` using an infix expression parser.
 ///
-/// Tokens are space-separated and evaluated left-to-right:
-/// - Filter tokens (`.task`, `#tag`, `prio:value`, `due:value`, `due:>value`, `due:<value`)
-///   push a new predicate onto the stack.
-/// - `and` pops two predicates and pushes their conjunction.
-/// - `or` pops two predicates and pushes their disjunction.
-/// - `not` pops one predicate and pushes its negation.
+/// Tokens are space-separated.  Operators use standard infix notation:
+/// - Filter tokens: `.task`, `#<tag>`, `prio:<n>`, `prio:><n>`, `prio:<<n>`,
+///   `due:<yyyymmdd>`, `due:><yyyymmdd>`, `due:<<yyyymmdd>`
+/// - `and` – logical AND (lower precedence than `not`, higher than `or`)
+/// - `or`  – logical OR (lowest precedence)
+/// - `not` – logical NOT (prefix, highest precedence)
+/// - `(` / `)` – grouping; may be attached to adjacent tokens
 ///
-/// If multiple predicates remain on the stack after processing, they are implicitly
-/// combined with AND.
+/// Example: `.task and #urgent`, `(.task or #note) and prio:>3`
 ///
 /// An empty query returns [`Predicate::All`].
 pub fn parse_query(query: &str) -> MdResult<Predicate> {
@@ -71,80 +200,16 @@ pub fn parse_query(query: &str) -> MdResult<Predicate> {
         return Ok(Predicate::All);
     }
 
-    let mut stack: Vec<Predicate> = Vec::new();
-
-    for token in trimmed.split_whitespace() {
-        match token {
-            "and" => {
-                let b = stack
-                    .pop()
-                    .ok_or_else(|| MdError("'and' requires two operands".into()))?;
-                let a = stack
-                    .pop()
-                    .ok_or_else(|| MdError("'and' requires two operands".into()))?;
-                stack.push(Predicate::And(Box::new(a), Box::new(b)));
-            }
-            "or" => {
-                let b = stack
-                    .pop()
-                    .ok_or_else(|| MdError("'or' requires two operands".into()))?;
-                let a = stack
-                    .pop()
-                    .ok_or_else(|| MdError("'or' requires two operands".into()))?;
-                stack.push(Predicate::Or(Box::new(a), Box::new(b)));
-            }
-            "not" => {
-                let a = stack
-                    .pop()
-                    .ok_or_else(|| MdError("'not' requires one operand".into()))?;
-                stack.push(Predicate::Not(Box::new(a)));
-            }
-            ".task" => stack.push(Predicate::IsTask),
-            t if t.starts_with('#') => {
-                let tag = t[1..].to_string();
-                if tag.is_empty() {
-                    return Err(MdError("Tag name after '#' cannot be empty".into()));
-                }
-                stack.push(Predicate::HasTag(tag));
-            }
-            t if t.starts_with("prio:") => {
-                let prio_str = &t[5..];
-                let prio = match prio_str {
-                    "low" => Priority::Low,
-                    "medium" => Priority::Medium,
-                    "high" => Priority::High,
-                    other => {
-                        return Err(MdError(format!("Unknown priority value: '{other}'")));
-                    }
-                };
-                stack.push(Predicate::PrioIs(prio));
-            }
-            t if t.starts_with("due:") => {
-                let due_str = &t[4..];
-                if let Some(rest) = due_str.strip_prefix('>') {
-                    stack.push(Predicate::DueAfter(normalize_due_date(rest)));
-                } else if let Some(rest) = due_str.strip_prefix('<') {
-                    stack.push(Predicate::DueBefore(normalize_due_date(rest)));
-                } else {
-                    stack.push(Predicate::DueIs(normalize_due_date(due_str)));
-                }
-            }
-            other => {
-                return Err(MdError(format!("Unknown filter token: '{other}'")));
-            }
-        }
+    let tokens = tokenize(trimmed);
+    let mut parser = Parser::new(tokens);
+    let pred = parser.parse_or()?;
+    if parser.peek().is_some() {
+        return Err(MdError(format!(
+            "Unexpected token '{}' in query",
+            parser.peek().unwrap()
+        )));
     }
-
-    if stack.is_empty() {
-        return Ok(Predicate::All);
-    }
-
-    // Combine remaining stack items with implicit AND
-    let mut result = stack.remove(0);
-    for pred in stack {
-        result = Predicate::And(Box::new(result), Box::new(pred));
-    }
-    Ok(result)
+    Ok(pred)
 }
 
 /// Converts an 8-digit `yyyymmdd` string to the `YYYY-MM-DD` format used in stored items.

@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::models::{Item, ItemKind, Priority, Status};
+use crate::models::{Item, ItemKind, Status};
 use crate::util::parse_tags;
 use crate::{MdError, MdResult};
 use std::fmt::Write as FmtWrite;
@@ -9,12 +9,27 @@ use std::path::{Path, PathBuf};
 
 const HEADER_EXAMPLES: &str = "\
 # status: pending|completed
-# priority: low|medium|high
+# priority: 5
 # due: 2099-12-31
 # tags: tag-one, tag-two
 ";
 
-/// Writes an item to `<root>/<id>/MAIN.md`.
+/// Returns the path to the item's markdown file inside `item_dir`.
+/// Looks for any file whose lowercased name equals "main.md"; returns the
+/// canonical `main.md` path (lowercase) as the canonical target.
+fn find_main_md(item_dir: &Path) -> Option<PathBuf> {
+    if let Ok(rd) = fs::read_dir(item_dir) {
+        for entry in rd.flatten() {
+            let name = entry.file_name();
+            if name.to_string_lossy().to_lowercase() == "main.md" {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+/// Writes an item to `<root>/<id>/main.md`.
 pub fn write_item(config: &Config, item: &Item) -> MdResult<PathBuf> {
     write_item_inner(config, item, false)
 }
@@ -27,8 +42,14 @@ pub fn write_item_with_examples(config: &Config, item: &Item) -> MdResult<PathBu
 fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdResult<PathBuf> {
     let item_dir = config.root.join(&item.id);
     fs::create_dir_all(&item_dir)?;
-    let path = item_dir.join("MAIN.md");
-    let tmp_path = item_dir.join("MAIN.md.tmp");
+    // Always write to lowercase "main.md"; if an old mixed-case file exists, remove it first.
+    let path = item_dir.join("main.md");
+    if let Some(existing) = find_main_md(&item_dir) {
+        if existing != path {
+            fs::remove_file(&existing)?;
+        }
+    }
+    let tmp_path = item_dir.join("main.md.tmp");
     {
         let mut file = File::create(&tmp_path)?;
         write_header(&mut file, item, include_examples)?;
@@ -39,13 +60,12 @@ fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdR
 }
 
 fn write_header(file: &mut File, item: &Item, include_examples: bool) -> MdResult<()> {
-    writeln!(file, "id: {}", item.id)?;
     writeln!(file, "title: {}", item.title)?;
     if let Some(status) = &item.status {
         writeln!(file, "status: {}", status.as_str())?;
     }
     if let Some(priority) = &item.priority {
-        writeln!(file, "priority: {}", priority.as_str())?;
+        writeln!(file, "priority: {priority}")?;
     }
     if let Some(due) = &item.due {
         writeln!(file, "due: {}", due)?;
@@ -84,8 +104,8 @@ pub fn load_all_items(config: &Config) -> MdResult<Vec<Item>> {
         {
             continue;
         }
-        let main_path = dir_path.join("MAIN.md");
-        if main_path.is_file() {
+        let main_path = find_main_md(&dir_path);
+        if let Some(main_path) = main_path {
             match read_item(&main_path) {
                 Ok(item) => out.push(item),
                 Err(err) => {
@@ -115,7 +135,7 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
     let mut title: Option<String> = None;
     let mut tags: Vec<String> = Vec::new();
     let mut status: Option<Status> = None;
-    let mut priority: Option<Priority> = None;
+    let mut priority: Option<u32> = None;
     let mut due: Option<String> = None;
     let mut body = String::new();
     let mut in_body = false;
@@ -145,12 +165,7 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
                     }
                 }
                 "priority" => {
-                    priority = match v {
-                        "low" => Some(Priority::Low),
-                        "medium" => Some(Priority::Medium),
-                        "high" => Some(Priority::High),
-                        _ => None,
-                    }
+                    priority = v.parse::<u32>().ok();
                 }
                 "due" => due = Some(v.to_string()),
                 // "type" field is no longer used; kind is derived from due date
@@ -182,7 +197,7 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
 }
 
 /// Finds an item whose UUID directory name starts with `prefix`.
-/// Returns `(path_to_MAIN.md, item)`.
+/// Returns `(path_to_main.md, item)`.
 pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> {
     let mut matches: Vec<PathBuf> = Vec::new();
     if config.root.exists() {
@@ -194,8 +209,7 @@ pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> 
             }
             if let Some(dir_name) = dir_path.file_name().and_then(|n| n.to_str()) {
                 if dir_name.starts_with(prefix) && !dir_name.starts_with('.') {
-                    let main_path = dir_path.join("MAIN.md");
-                    if main_path.is_file() {
+                    if let Some(main_path) = find_main_md(&dir_path) {
                         matches.push(main_path);
                     }
                 }
