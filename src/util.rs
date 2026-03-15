@@ -17,7 +17,7 @@ pub fn validate_due(raw: &str) -> Result<String, String> {
 /// Returns the shortest prefix of `id` that is unique among `all_ids`.
 /// Falls back to the full `id` if no shorter prefix is unique.
 pub fn shortest_unique_prefix(id: &str, all_ids: &[String]) -> String {
-    for len in 1..=id.len() {
+    for len in 4..=id.len() {
         let prefix = &id[..len];
         if all_ids
             .iter()
