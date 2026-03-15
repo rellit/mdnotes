@@ -2,23 +2,6 @@ use clap::ValueEnum;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Priority {
-    Low,
-    Medium,
-    High,
-}
-
-impl Priority {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Priority::Low => "low",
-            Priority::Medium => "medium",
-            Priority::High => "high",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Status {
     Pending,
     Completed,
@@ -67,7 +50,7 @@ pub struct Item {
     pub body: String,
     pub tags: Vec<String>,
     pub status: Option<Status>,
-    pub priority: Option<Priority>,
+    pub priority: Option<u32>,
     pub due: Option<String>,
 }
 
@@ -85,7 +68,7 @@ impl fmt::Display for Item {
             writeln!(f, "status: {}", status.as_str())?;
         }
         if let Some(priority) = &self.priority {
-            writeln!(f, "priority: {}", priority.as_str())?;
+            writeln!(f, "priority: {priority}")?;
         }
         if let Some(due) = &self.due {
             writeln!(f, "due: {due}")?;

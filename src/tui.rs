@@ -504,7 +504,7 @@ impl ListPane {
                     meta.push(format!("due {due}"));
                 }
                 if let Some(priority) = &item.priority {
-                    meta.push(format!("prio {}", priority.as_str()));
+                    meta.push(format!("prio {priority}"));
                 }
                 let mut line = item.title.clone();
                 if !meta.is_empty() {
@@ -799,7 +799,7 @@ impl App {
             if let Some(priority) = &item.priority {
                 lines.push(Line::from(vec![
                     Span::styled("priority: ", Style::default().fg(Color::Gray)),
-                    Span::styled(priority.as_str(), Style::default().fg(Color::Green)),
+                    Span::styled(priority.to_string(), Style::default().fg(Color::Green)),
                 ]));
             }
             if let Some(due) = &item.due {

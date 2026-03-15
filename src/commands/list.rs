@@ -1,13 +1,11 @@
 use crate::cli::ListArgs;
 use crate::config::{ensure_setup, SetupOptions};
 use crate::filter::parse_query;
-use crate::git::sync_pull;
 use crate::storage::load_all_items;
 use crate::MdResult;
 
 pub fn run(args: ListArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
-    sync_pull(&config)?;
     let predicate = parse_query(args.query.as_deref().unwrap_or(""))?;
     let all = load_all_items(&config)?;
     let mut items: Vec<_> = all.into_iter().filter(|i| predicate.matches(i)).collect();
@@ -22,7 +20,7 @@ fn format_item(item: crate::models::Item) -> String {
         meta.push(status.as_str().to_string());
     }
     if let Some(priority) = &item.priority {
-        meta.push(format!("prio {}", priority.as_str()));
+        meta.push(format!("prio {priority}"));
     }
     if let Some(due) = &item.due {
         meta.push(format!("due {due}"));

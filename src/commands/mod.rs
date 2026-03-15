@@ -4,6 +4,7 @@ pub mod config;
 pub mod delete;
 pub mod due;
 pub mod edit;
-pub mod find;
 pub mod list;
+pub mod priority;
 pub mod show;
+pub mod sync;

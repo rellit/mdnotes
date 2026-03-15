@@ -11,7 +11,7 @@ pub mod util;
 
 use clap::Parser;
 pub use cli::{Cli, Commands};
-pub use models::{Item, ItemKind, Priority, Status};
+pub use models::{Item, ItemKind, Status};
 pub use util::{parse_tags, validate_due};
 
 #[derive(Debug)]
@@ -76,10 +76,11 @@ fn dispatch(cli: Cli) -> MdResult<Vec<String>> {
         Commands::List(args) => commands::list::run(args, setup_opts),
         Commands::Delete { id } => commands::delete::run(id, setup_opts),
         Commands::Edit(args) => commands::edit::run(args, setup_opts),
-        Commands::Find(args) => commands::find::run(args, setup_opts),
         Commands::Complete { id } => commands::complete::run(id, true, setup_opts),
         Commands::Incomplete { id } => commands::complete::run(id, false, setup_opts),
         Commands::Due { id, due } => commands::due::run(id, due, setup_opts),
         Commands::Show { id } => commands::show::run(id, setup_opts),
+        Commands::Priority(args) => commands::priority::run(args, setup_opts),
+        Commands::Sync => commands::sync::run(setup_opts),
     }
 }
