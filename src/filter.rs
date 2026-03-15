@@ -148,7 +148,8 @@ pub fn parse_query(query: &str) -> MdResult<Predicate> {
 }
 
 /// Converts an 8-digit `yyyymmdd` string to the `YYYY-MM-DD` format used in stored items.
-/// If the input is not exactly 8 ASCII digits, it is returned unchanged.
+/// If the input already contains hyphens (e.g. `YYYY-MM-DD`) or is not exactly 8 ASCII digits,
+/// it is returned unchanged.
 fn normalize_due_date(s: &str) -> String {
     if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
         format!("{}-{}-{}", &s[0..4], &s[4..6], &s[6..8])

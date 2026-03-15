@@ -74,15 +74,15 @@ pub struct AddArgs {
 ///
 /// The optional query string uses a stack-based postfix filter language:
 ///
-///   `.task`         – item has a due date (is a task)  
-///   `#<tag>`        – item has the given tag  
-///   `prio:<value>`  – item priority is low|medium|high  
-///   `due:<yyyymmdd>`  – item due date equals  
+///   `.task`           – item has a due date (is a task)  
+///   `#<tag>`          – item has the given tag  
+///   `prio:<value>`    – item priority is low|medium|high  
+///   `due:<yyyymmdd>`  – item due date equals (8-digit compact or YYYY-MM-DD)  
 ///   `due:><yyyymmdd>` – item due date is after  
 ///   `due:<<yyyymmdd>` – item due date is before  
-///   `and`           – logical AND of the two top predicates  
-///   `or`            – logical OR of the two top predicates  
-///   `not`           – logical NOT of the top predicate  
+///   `and`             – logical AND of the two top predicates  
+///   `or`              – logical OR of the two top predicates  
+///   `not`             – logical NOT of the top predicate  
 ///
 /// Multiple tokens without explicit operators are implicitly ANDed together.
 #[derive(Args, Debug)]

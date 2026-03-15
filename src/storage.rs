@@ -158,7 +158,7 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
             }
         }
     }
-    // Fall back to directory name as id if not present in file
+    // Fall back to directory name as ID if not present in file
     let id = id
         .or_else(|| {
             path.parent()

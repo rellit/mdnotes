@@ -10,7 +10,11 @@ pub fn run(id: String, completed: bool, setup: SetupOptions) -> MdResult<Vec<Str
     sync_pull(&config)?;
     let (_path, mut item) = resolve_item(&config, &id)?;
     if !item.is_task() {
-        return Err("Completion can only be toggled for tasks (items with a due date)".into());
+        return Err(
+            "Cannot toggle completion: item must have a due date to be considered a task. \
+             Use the `due` command to set a due date first."
+                .into(),
+        );
     }
     item.status = Some(if completed {
         Status::Completed

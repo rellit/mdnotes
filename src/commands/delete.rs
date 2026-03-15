@@ -11,7 +11,7 @@ pub fn run(id: String, setup: SetupOptions) -> MdResult<Vec<String>> {
     // Remove the entire UUID directory (parent of MAIN.md)
     let item_dir = path
         .parent()
-        .ok_or("Could not determine item directory")?;
+        .ok_or("MAIN.md file has no parent directory; cannot delete item")?;
     fs::remove_dir_all(item_dir)?;
     sync_push(&config, &format!("mdnotes: delete {}", item.id))?;
     Ok(vec![format!("Deleted {}", item_dir.display())])

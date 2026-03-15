@@ -255,8 +255,10 @@ fn edit_without_fields_opens_editor_and_sets_due() {
     let id = all[0].id.clone();
     let main_path = base.join("repo").join(&id).join("MAIN.md");
     let mut content = std::fs::read_to_string(&main_path).unwrap();
-    // Add a due date directly to the file to simulate editor adding it
-    content = content.replace("--\n", "due: 2099-05-01\nstatus: pending\n--\n");
+    // Insert due/status headers before the "--" body separator
+    if let Some(pos) = content.find("\n--\n") {
+        content.insert_str(pos, "\ndue: 2099-05-01\nstatus: pending");
+    }
     std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
     std::env::set_var("EDITOR", "true");
