@@ -1,8 +1,9 @@
 name: Publish to AUR
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 concurrency:
   group: aur-publish
@@ -12,6 +13,7 @@ jobs:
   aur-publish:
     name: Publish mdnotes-bin to AUR
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
 
@@ -22,10 +24,16 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Get version from release tag
+      - name: Get version from latest release tag
         id: get_version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName')
+          if [ -z "${TAG}" ]; then
+            echo "Error: could not determine release tag"
+            exit 1
+          fi
           VERSION="${TAG#v}"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Publishing version: ${VERSION}"
