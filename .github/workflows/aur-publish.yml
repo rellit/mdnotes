@@ -1,0 +1,79 @@
+name: Publish to AUR
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: aur-publish
+  cancel-in-progress: false
+
+jobs:
+  aur-publish:
+    name: Publish mdnotes-bin to AUR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Get version from release tag
+        id: get_version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing version: ${VERSION}"
+
+      - name: Compute checksums
+        id: checksums
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+
+          curl -fsSL -o license.txt \
+            "https://raw.githubusercontent.com/rellit/mdnotes/v${VERSION}/LICENSE"
+          SHA256_LICENSE=$(sha256sum license.txt | cut -d' ' -f1)
+          echo "sha256_license=${SHA256_LICENSE}" >> "$GITHUB_OUTPUT"
+
+          curl -fsSL -o mdnotes-linux-x86_64.tar.gz \
+            "https://github.com/rellit/mdnotes/releases/download/v${VERSION}/mdnotes-linux-x86_64.tar.gz"
+          SHA256_X86_64=$(sha256sum mdnotes-linux-x86_64.tar.gz | cut -d' ' -f1)
+          echo "sha256_x86_64=${SHA256_X86_64}" >> "$GITHUB_OUTPUT"
+
+      - name: Update PKGBUILD
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          SHA256_LICENSE="${{ steps.checksums.outputs.sha256_license }}"
+          SHA256_X86_64="${{ steps.checksums.outputs.sha256_x86_64 }}"
+
+          sed -i "s/^pkgver=.*/pkgver=${VERSION}/" aur/PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" aur/PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('${SHA256_LICENSE}')/" aur/PKGBUILD
+          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${SHA256_X86_64}')/" aur/PKGBUILD
+
+          echo "Updated PKGBUILD:"
+          cat aur/PKGBUILD
+
+      - name: Commit and push updated PKGBUILD
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add aur/PKGBUILD
+          git diff --staged --quiet || git commit -m "chore: update PKGBUILD to v${{ steps.get_version.outputs.version }}"
+          git push
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v2.7.2
+        with:
+          pkgname: mdnotes-bin
+          pkgbuild: ./aur/PKGBUILD
+          commit-username: ${{ secrets.AUR_USERNAME }}
+          commit-email: ${{ secrets.AUR_EMAIL }}
+          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit-message: "Update to v${{ steps.get_version.outputs.version }}"
+          force-push: true
