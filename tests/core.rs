@@ -590,6 +590,84 @@ fn mdn_file_acts_as_config() {
 }
 
 #[test]
+fn list_query_tagged() {
+    let base = temp_home("list_tagged");
+    run_with(&base, &["add", "Tagged Note", "--tags", "alpha"]);
+    run_with(&base, &["add", "Untagged Note"]);
+
+    // `tagged` keyword: only items with at least one tag
+    let tagged = run_with(&base, &["list", "tagged"]);
+    assert_eq!(tagged.len(), 1);
+    assert!(tagged[0].contains("Tagged Note"));
+
+    // `not tagged`: only items without any tag
+    let untagged = run_with(&base, &["list", "not tagged"]);
+    assert_eq!(untagged.len(), 1);
+    assert!(untagged[0].contains("Untagged Note"));
+}
+
+#[test]
+fn list_query_title_filter() {
+    let base = temp_home("list_title");
+    run_with(&base, &["add", "Hello World"]);
+    run_with(&base, &["add", "Goodbye World"]);
+    run_with(&base, &["add", "Something Else"]);
+
+    // title: prefix matches substring (case-insensitive)
+    let hello = run_with(&base, &["list", "title:Hello"]);
+    assert_eq!(hello.len(), 1);
+    assert!(hello[0].contains("Hello World"));
+
+    let world = run_with(&base, &["list", "title:world"]);
+    assert_eq!(world.len(), 2);
+
+    let else_ = run_with(&base, &["list", "title:Else"]);
+    assert_eq!(else_.len(), 1);
+    assert!(else_[0].contains("Something Else"));
+}
+
+#[test]
+fn list_query_priority_ge_le() {
+    let base = temp_home("prio_ge_le");
+    run_with(&base, &["add", "High", "--priority", "10"]);
+    run_with(&base, &["add", "Mid", "--priority", "5"]);
+    run_with(&base, &["add", "Low", "--priority", "2"]);
+    run_with(&base, &["add", "No Prio"]);
+
+    // prio:>=5 → High and Mid
+    let ge5 = run_with(&base, &["list", "prio:>=5"]);
+    assert_eq!(ge5.len(), 2);
+    assert!(ge5.iter().any(|l| l.contains("High")));
+    assert!(ge5.iter().any(|l| l.contains("Mid")));
+
+    // prio:<=5 → Mid and Low
+    let le5 = run_with(&base, &["list", "prio:<=5"]);
+    assert_eq!(le5.len(), 2);
+    assert!(le5.iter().any(|l| l.contains("Mid")));
+    assert!(le5.iter().any(|l| l.contains("Low")));
+}
+
+#[test]
+fn list_query_due_ge_le() {
+    let base = temp_home("due_ge_le");
+    run_with(&base, &["add", "Early Task", "--due", "2099-01-01"]);
+    run_with(&base, &["add", "Mid Task", "--due", "2099-06-15"]);
+    run_with(&base, &["add", "Late Task", "--due", "2099-12-31"]);
+
+    // due:>=20990615 → Mid Task and Late Task
+    let ge = run_with(&base, &["list", "due:>=20990615"]);
+    assert_eq!(ge.len(), 2);
+    assert!(ge.iter().any(|l| l.contains("Mid Task")));
+    assert!(ge.iter().any(|l| l.contains("Late Task")));
+
+    // due:<=20990615 → Early Task and Mid Task
+    let le = run_with(&base, &["list", "due:<=20990615"]);
+    assert_eq!(le.len(), 2);
+    assert!(le.iter().any(|l| l.contains("Early Task")));
+    assert!(le.iter().any(|l| l.contains("Mid Task")));
+}
+
+#[test]
 fn find_mdn_file_traverses_upward() {
     let base = temp_home("mdn_traversal");
     let repo_dir = base.join("repo");

@@ -533,7 +533,7 @@ impl ListPane {
             )
             .highlight_style(highlight)
             .highlight_symbol("▶ ");
-        let mut state = self.state.clone();
+        let mut state = self.state;
         frame.render_stateful_widget(list, area, &mut state);
     }
 }
@@ -708,7 +708,7 @@ impl App {
                 Constraint::Length(3),
                 Constraint::Length(3),
             ])
-            .split(frame.size());
+            .split(frame.area());
         let main_area = layout[1];
 
         let titles = ["Notes", "Tasks", "Settings"]
