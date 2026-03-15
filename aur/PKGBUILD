@@ -9,6 +9,7 @@ url="https://github.com/rellit/mdnotes"
 license=('MIT')
 provides=('mdnotes')
 conflicts=('mdnotes')
+options=('!strip')
 
 source=("LICENSE::https://raw.githubusercontent.com/rellit/mdnotes/v${pkgver}/LICENSE")
 source_x86_64=("mdnotes-${pkgver}-linux-x86_64.tar.gz::https://github.com/rellit/mdnotes/releases/download/v${pkgver}/mdnotes-linux-x86_64.tar.gz")
