@@ -64,7 +64,11 @@ pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     write_item(&config, &item)?;
     refresh_tag_links(&config, &item)?;
     sync_push(&config, &format!("mdnotes: edit {}", item.id))?;
-    Ok(vec![format!("Updated {}/{}/MAIN.md", config.root.display(), item.id)])
+    Ok(vec![format!(
+        "Updated {}/{}/MAIN.md",
+        config.root.display(),
+        item.id
+    )])
 }
 
 fn open_editor(config: &crate::config::Config, path: &std::path::Path) -> MdResult<()> {

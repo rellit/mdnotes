@@ -225,7 +225,14 @@ fn list_query_and_or() {
     let base = temp_home("list_bool");
     run_with(
         &base,
-        &["add", "Alpha Task", "--due", "2099-01-01", "--tags", "alpha"],
+        &[
+            "add",
+            "Alpha Task",
+            "--due",
+            "2099-01-01",
+            "--tags",
+            "alpha",
+        ],
     );
     run_with(&base, &["add", "Beta Task", "--due", "2099-06-01"]);
     run_with(&base, &["add", "Alpha Note", "--tags", "alpha"]);
@@ -493,4 +500,3 @@ fn load_items_filters_by_kind() {
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0].title, "A Task");
 }
-
