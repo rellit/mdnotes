@@ -327,9 +327,22 @@ fn main_md_written_lowercase() {
     .unwrap();
     let all = load_all_items(&config).unwrap();
     let id = all[0].id.clone();
-    // The file should be lowercase main.md
-    assert!(base.join("repo").join(&id).join("main.md").exists());
-    assert!(!base.join("repo").join(&id).join("MAIN.md").exists());
+    let item_dir = base.join("repo").join(&id);
+    // Read the actual on-disk filenames (always case-accurate, even on
+    // case-insensitive filesystems like Windows/macOS).
+    let actual_names: Vec<String> = fs::read_dir(&item_dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    assert!(
+        actual_names.iter().any(|n| n == "main.md"),
+        "expected main.md in {item_dir:?}, found {actual_names:?}"
+    );
+    assert!(
+        !actual_names.iter().any(|n| n == "MAIN.md"),
+        "expected no MAIN.md in {item_dir:?}, found {actual_names:?}"
+    );
 }
 
 #[test]
