@@ -1,6 +1,6 @@
 [package]
 name = "mdnotes"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["rellit"]
 description = "A simple command-line/TUI application for taking notes and managing tasks"
