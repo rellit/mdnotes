@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod filter;
 pub mod git;
 pub mod models;
 pub mod storage;

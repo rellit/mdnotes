@@ -1,4 +1,4 @@
-use crate::config::{ensure_directories, Config};
+use crate::config::Config;
 use crate::models::{Item, ItemKind, Priority, Status};
 use crate::util::parse_tags;
 use crate::{MdError, MdResult};
@@ -14,19 +14,21 @@ const HEADER_EXAMPLES: &str = "\
 # tags: tag-one, tag-two
 ";
 
+/// Writes an item to `<root>/<id>/MAIN.md`.
 pub fn write_item(config: &Config, item: &Item) -> MdResult<PathBuf> {
     write_item_inner(config, item, false)
 }
 
+/// Writes an item with example headers as comments.
 pub fn write_item_with_examples(config: &Config, item: &Item) -> MdResult<PathBuf> {
     write_item_inner(config, item, true)
 }
 
 fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdResult<PathBuf> {
-    ensure_directories(&config.root)?;
-    let dir = config.root.join(item.kind.dir_name());
-    let path = dir.join(format!("{}.md", item.id));
-    let tmp_path = dir.join(format!("{}.md.tmp", item.id));
+    let item_dir = config.root.join(&item.id);
+    fs::create_dir_all(&item_dir)?;
+    let path = item_dir.join("MAIN.md");
+    let tmp_path = item_dir.join("MAIN.md.tmp");
     {
         let mut file = File::create(&tmp_path)?;
         write_header(&mut file, item, include_examples)?;
@@ -39,14 +41,6 @@ fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdR
 fn write_header(file: &mut File, item: &Item, include_examples: bool) -> MdResult<()> {
     writeln!(file, "id: {}", item.id)?;
     writeln!(file, "title: {}", item.title)?;
-    writeln!(
-        file,
-        "type: {}",
-        match item.kind {
-            ItemKind::Note => "note",
-            ItemKind::Task => "task",
-        }
-    )?;
     if let Some(status) = &item.status {
         writeln!(file, "status: {}", status.as_str())?;
     }
@@ -69,22 +63,35 @@ fn write_header(file: &mut File, item: &Item, include_examples: bool) -> MdResul
     Ok(())
 }
 
-pub fn load_items(config: &Config, kind: ItemKind) -> MdResult<Vec<Item>> {
-    let dir = config.root.join(kind.dir_name());
+/// Loads all items from `<root>/<uuid>/MAIN.md` directories.
+pub fn load_all_items(config: &Config) -> MdResult<Vec<Item>> {
+    let root = &config.root;
     let mut out = Vec::new();
-    if !dir.exists() {
+    if !root.exists() {
         return Ok(out);
     }
-    for entry in fs::read_dir(&dir)? {
+    for entry in fs::read_dir(root)? {
         let entry = entry?;
-        let path = entry.path();
-        if path.is_file() {
-            match read_item(&path, kind) {
+        let dir_path = entry.path();
+        if !dir_path.is_dir() {
+            continue;
+        }
+        // Skip hidden directories such as .git
+        if dir_path
+            .file_name()
+            .map(|n| n.to_string_lossy().starts_with('.'))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let main_path = dir_path.join("MAIN.md");
+        if main_path.is_file() {
+            match read_item(&main_path) {
                 Ok(item) => out.push(item),
                 Err(err) => {
                     eprintln!(
                         "Warning: failed to load item from '{}': {}",
-                        path.display(),
+                        main_path.display(),
                         err
                     );
                 }
@@ -94,7 +101,14 @@ pub fn load_items(config: &Config, kind: ItemKind) -> MdResult<Vec<Item>> {
     Ok(out)
 }
 
-pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
+/// Loads items of a specific kind (notes or tasks) by filtering all items.
+pub fn load_items(config: &Config, kind: ItemKind) -> MdResult<Vec<Item>> {
+    let all = load_all_items(config)?;
+    Ok(all.into_iter().filter(|item| item.kind == kind).collect())
+}
+
+/// Parses a single `MAIN.md` file into an [`Item`].
+pub fn read_item(path: &Path) -> MdResult<Item> {
     let mut content = String::new();
     File::open(path)?.read_to_string(&mut content)?;
     let mut id: Option<String> = None;
@@ -103,10 +117,8 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
     let mut status: Option<Status> = None;
     let mut priority: Option<Priority> = None;
     let mut due: Option<String> = None;
-    let mut kind = fallback_kind;
     let mut body = String::new();
     let mut in_body = false;
-    let mut explicit_type = false;
     for line in content.lines() {
         if in_body {
             if !body.is_empty() {
@@ -141,39 +153,22 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
                     }
                 }
                 "due" => due = Some(v.to_string()),
-                "type" => {
-                    kind = match v {
-                        "note" => ItemKind::Note,
-                        "task" => ItemKind::Task,
-                        other => {
-                            return Err(MdError(format!(
-                                "Unrecognized item type '{}' in file {}",
-                                other,
-                                path.display()
-                            )))
-                        }
-                    };
-                    explicit_type = true;
-                }
+                // "type" field is no longer used; kind is derived from due date
                 _ => {}
             }
         }
     }
+    // Fall back to directory name as ID if not present in file
     let id = id
         .or_else(|| {
-            path.file_stem()
-                .and_then(|s| s.to_str())
+            path.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
                 .map(|s| s.to_string())
         })
         .ok_or_else(|| MdError("Missing id".into()))?;
     let title = title.ok_or_else(|| MdError("Missing title".into()))?;
-    let kind = if status.is_some() || due.is_some() {
-        ItemKind::Task
-    } else if explicit_type {
-        kind
-    } else {
-        fallback_kind
-    };
+    let kind = ItemKind::infer(&status, &due);
     Ok(Item {
         id,
         title,
@@ -186,19 +181,23 @@ pub fn read_item(path: &Path, fallback_kind: ItemKind) -> MdResult<Item> {
     })
 }
 
-pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(ItemKind, PathBuf, Item)> {
-    let mut matches: Vec<(ItemKind, PathBuf)> = Vec::new();
-    for kind in [ItemKind::Note, ItemKind::Task] {
-        let dir = config.root.join(kind.dir_name());
-        if !dir.exists() {
-            continue;
-        }
-        for entry in fs::read_dir(&dir)? {
+/// Finds an item whose UUID directory name starts with `prefix`.
+/// Returns `(path_to_MAIN.md, item)`.
+pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> {
+    let mut matches: Vec<PathBuf> = Vec::new();
+    if config.root.exists() {
+        for entry in fs::read_dir(&config.root)? {
             let entry = entry?;
-            let path = entry.path();
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                if stem.starts_with(prefix) {
-                    matches.push((kind, path));
+            let dir_path = entry.path();
+            if !dir_path.is_dir() {
+                continue;
+            }
+            if let Some(dir_name) = dir_path.file_name().and_then(|n| n.to_str()) {
+                if dir_name.starts_with(prefix) && !dir_name.starts_with('.') {
+                    let main_path = dir_path.join("MAIN.md");
+                    if main_path.is_file() {
+                        matches.push(main_path);
+                    }
                 }
             }
         }
@@ -208,18 +207,12 @@ pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(ItemKind, PathBu
     }
     if matches.len() > 1 {
         let mut msg = String::from("Multiple matches:\n");
-        for (k, p) in matches {
-            writeln!(
-                &mut msg,
-                "- {} ({})",
-                p.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
-                k.dir_name()
-            )
-            .map_err(|e| MdError(e.to_string()))?;
+        for p in &matches {
+            writeln!(&mut msg, "- {}", p.display()).map_err(|e| MdError(e.to_string()))?;
         }
         return Err(MdError(msg));
     }
-    let (kind, path) = matches.into_iter().next().unwrap();
-    let item = read_item(&path, kind)?;
-    Ok((kind, path, item))
+    let path = matches.into_iter().next().unwrap();
+    let item = read_item(&path)?;
+    Ok((path, item))
 }

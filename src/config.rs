@@ -162,9 +162,7 @@ fn read_config(path: &Path) -> MdResult<Config> {
 }
 
 pub fn ensure_directories(root: &Path) -> MdResult<()> {
-    fs::create_dir_all(root.join("notes"))?;
-    fs::create_dir_all(root.join("tasks"))?;
-    fs::create_dir_all(root.join("tags"))?;
+    fs::create_dir_all(root)?;
     Ok(())
 }
 

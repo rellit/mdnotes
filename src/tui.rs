@@ -14,7 +14,7 @@ use crate::cli::{AddArgs, EditArgs};
 use crate::commands::{add, complete, edit};
 use crate::config::{ensure_setup, save_config, Config, SetupOptions};
 use crate::models::{Item, ItemKind, Status};
-use crate::storage::load_items;
+use crate::storage::load_all_items;
 use crate::{MdError, MdResult};
 
 pub fn run_tui(setup: SetupOptions) -> MdResult<()> {
@@ -667,8 +667,9 @@ struct App {
 
 impl App {
     fn new(config: Config, setup: SetupOptions) -> MdResult<Self> {
-        let notes = load_items(&config, ItemKind::Note)?;
-        let tasks = load_items(&config, ItemKind::Task)?;
+        let all = load_all_items(&config)?;
+        let notes: Vec<Item> = all.iter().filter(|i| !i.is_task()).cloned().collect();
+        let tasks: Vec<Item> = all.into_iter().filter(|i| i.is_task()).collect();
         Ok(Self {
             tab: ActiveTab::Notes,
             notes: ListPane::new(ItemKind::Note, notes),
@@ -1123,8 +1124,9 @@ impl App {
 
     fn refresh_lists(&mut self) -> MdResult<()> {
         self.config = ensure_setup(self.setup.clone())?;
-        let notes = load_items(&self.config, ItemKind::Note)?;
-        let tasks = load_items(&self.config, ItemKind::Task)?;
+        let all = load_all_items(&self.config)?;
+        let notes: Vec<Item> = all.iter().filter(|i| !i.is_task()).cloned().collect();
+        let tasks: Vec<Item> = all.into_iter().filter(|i| i.is_task()).collect();
         self.notes.set_items(notes);
         self.tasks.set_items(tasks);
         Ok(())

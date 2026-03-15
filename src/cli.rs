@@ -26,7 +26,7 @@ pub enum Commands {
     /// Create a new note or task
     #[command(visible_alias = "a")]
     Add(AddArgs),
-    /// List notes or tasks
+    /// List items, optionally filtered by a query string
     #[command(visible_aliases = ["ls", "l"])]
     List(ListArgs),
     /// Delete a note or task by id/prefix
@@ -70,28 +70,26 @@ pub struct AddArgs {
     pub tags: Option<String>,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
-pub enum ListTarget {
-    All,
-    #[value(alias = "n")]
-    Notes,
-    #[value(alias = "t")]
-    Tasks,
-}
-
+/// Arguments for the `list` command.
+///
+/// The optional query string uses a stack-based postfix filter language:
+///
+///   `.task`           – item has a due date (is a task)  
+///   `#<tag>`          – item has the given tag  
+///   `prio:<value>`    – item priority is low|medium|high  
+///   `due:<yyyymmdd>`  – item due date equals (8-digit compact or YYYY-MM-DD)  
+///   `due:><yyyymmdd>` – item due date is after  
+///   `due:<<yyyymmdd>` – item due date is before  
+///   `and`             – logical AND of the two top predicates  
+///   `or`              – logical OR of the two top predicates  
+///   `not`             – logical NOT of the top predicate  
+///
+/// Multiple tokens without explicit operators are implicitly ANDed together.
 #[derive(Args, Debug)]
 pub struct ListArgs {
-    #[arg(
-        value_enum,
-        value_name = "target",
-        help = "notes|tasks",
-        required = false
-    )]
-    pub target: Option<ListTarget>,
-    #[arg(long, value_enum)]
-    pub status: Option<Status>,
-    #[arg(long, value_enum)]
-    pub priority: Option<Priority>,
+    /// Optional query string to filter items (e.g. ".task #ui and")
+    #[arg(value_name = "query", required = false)]
+    pub query: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -133,5 +131,15 @@ pub struct FindArgs {
         help = "notes|tasks",
         required = false
     )]
-    pub target: Option<ListTarget>,
+    pub target: Option<FindTarget>,
+}
+
+/// Filter target for the `find` command.
+#[derive(ValueEnum, Clone, Debug)]
+pub enum FindTarget {
+    All,
+    #[value(alias = "n")]
+    Notes,
+    #[value(alias = "t")]
+    Tasks,
 }
