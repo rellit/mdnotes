@@ -44,10 +44,11 @@ pub fn find_mdn_file() -> Option<PathBuf> {
 
 pub fn ensure_setup(opts: SetupOptions) -> MdResult<Config> {
     // When no explicit test overrides are provided, check for a .mdn project file first.
-    if opts.config_home.is_none() && opts.root_override.is_none() {
-        if let Some(mdn_path) = find_mdn_file() {
-            return load_mdn_config(&mdn_path, &opts);
-        }
+    if opts.config_home.is_none()
+        && opts.root_override.is_none()
+        && let Some(mdn_path) = find_mdn_file()
+    {
+        return load_mdn_config(&mdn_path, &opts);
     }
 
     let config_file = config_path(&opts);
@@ -161,13 +162,13 @@ fn config_home(opts: &SetupOptions) -> PathBuf {
         if let Some(appdata) = env::var_os("APPDATA") {
             return PathBuf::from(appdata).join("mdnotes");
         }
-    } else if cfg!(target_os = "macos") {
-        if let Some(home) = dirs_home() {
-            return home
-                .join("Library")
-                .join("Application Support")
-                .join("mdnotes");
-        }
+    } else if cfg!(target_os = "macos")
+        && let Some(home) = dirs_home()
+    {
+        return home
+            .join("Library")
+            .join("Application Support")
+            .join("mdnotes");
     }
     dirs_home()
         .map(|home| home.join(".config").join("mdnotes"))

@@ -1,10 +1,10 @@
-use crate::config::{ensure_setup, SetupOptions};
+use crate::MdResult;
+use crate::config::{SetupOptions, ensure_setup};
 use crate::git::{sync_pull, sync_push};
 use crate::models::{ItemKind, Status};
 use crate::storage::{resolve_item, write_item};
 use crate::tags::refresh_tag_links;
 use crate::util::validate_due_inner;
-use crate::MdResult;
 
 pub fn run(id: String, due: Option<String>, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;

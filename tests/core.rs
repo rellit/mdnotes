@@ -1,4 +1,4 @@
-use mdnotes::config::{ensure_setup, find_mdn_file, save_config, SetupOptions};
+use mdnotes::config::{SetupOptions, ensure_setup, find_mdn_file, save_config};
 use mdnotes::git::sync_pull;
 use mdnotes::models::Status;
 use mdnotes::storage::{load_all_items, load_items, resolve_item};
@@ -278,12 +278,18 @@ fn edit_without_fields_opens_editor_and_sets_due() {
     }
     std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
-    std::env::set_var("EDITOR", "true");
+    // SAFETY: single-threaded test, no concurrent env access
+    unsafe {
+        std::env::set_var("EDITOR", "true");
+    }
     run_with(&base, &["edit", &id]);
-    if let Some(prev) = prev_editor {
-        std::env::set_var("EDITOR", prev);
-    } else {
-        std::env::remove_var("EDITOR");
+    // SAFETY: single-threaded test, no concurrent env access
+    unsafe {
+        if let Some(prev) = prev_editor {
+            std::env::set_var("EDITOR", prev);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
     }
     // File should still be in the same UUID directory
     assert!(main_path.exists());
@@ -430,12 +436,14 @@ fn sync_pull_fast_forwards_remote_updates() {
     let base = temp_home("sync_pull_ff");
     let remote = base.join("remote.git");
     let remote_str = remote.to_string_lossy().to_string();
-    assert!(Command::new("git")
-        .args(["init", "--bare", &remote_str])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", &remote_str])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     run_with(&base, &["config", "--remote", &remote_str]);
     run_with(&base, &["add", "Initial"]);
@@ -450,48 +458,60 @@ fn sync_pull_fast_forwards_remote_updates() {
     let initial_head = git_rev_parse(&config.root);
 
     let clone_dir = base.join("clone");
-    assert!(Command::new("git")
-        .args(["clone", &remote_str, clone_dir.to_string_lossy().as_ref()])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["config", "user.email", "tester@example.com"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["config", "user.name", "Tester"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["clone", &remote_str, clone_dir.to_string_lossy().as_ref()])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["config", "user.email", "tester@example.com"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["config", "user.name", "Tester"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     fs::write(clone_dir.join("README.md"), "update").unwrap();
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["add", "README.md"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["commit", "-m", "remote update"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["push"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["commit", "-m", "remote update"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["push"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     let before_head = git_rev_parse(&config.root);
     assert_eq!(before_head, initial_head);

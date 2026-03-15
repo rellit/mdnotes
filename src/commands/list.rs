@@ -1,8 +1,8 @@
+use crate::MdResult;
 use crate::cli::ListArgs;
-use crate::config::{ensure_setup, SetupOptions};
+use crate::config::{SetupOptions, ensure_setup};
 use crate::filter::parse_query;
 use crate::storage::load_all_items;
-use crate::MdResult;
 
 pub fn run(args: ListArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;

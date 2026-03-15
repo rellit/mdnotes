@@ -5,14 +5,14 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
 
 use crate::cli::{AddArgs, EditArgs};
 use crate::commands::{add, complete, edit};
-use crate::config::{ensure_setup, save_config, Config, SetupOptions};
+use crate::config::{Config, SetupOptions, ensure_setup, save_config};
 use crate::models::{Item, ItemKind, Status};
 use crate::storage::load_all_items;
 use crate::{MdError, MdResult};
@@ -520,10 +520,10 @@ impl ListPane {
         if let Some(filter) = &self.status_filter {
             title_parts.push(format!("status: {}", filter.as_str()));
         }
-        if let Some(query) = &self.search_query {
-            if !query.is_empty() {
-                title_parts.push(format!("search: {query}"));
-            }
+        if let Some(query) = &self.search_query
+            && !query.is_empty()
+        {
+            title_parts.push(format!("search: {query}"));
         }
         let list = List::new(items)
             .block(
@@ -677,7 +677,9 @@ impl App {
             settings: SettingsPane::from_config(&config),
             config,
             setup,
-            status: String::from("Use arrows to navigate. n add, e edit, c complete, / search, f filter, o sort, Enter to save edits, q to quit."),
+            status: String::from(
+                "Use arrows to navigate. n add, e edit, c complete, / search, f filter, o sort, Enter to save edits, q to quit.",
+            ),
             input_mode: InputMode::Normal,
             quitting: false,
         })
@@ -688,12 +690,11 @@ impl App {
             terminal
                 .draw(|f| self.draw(f))
                 .map_err(|e| MdError(e.to_string()))?;
-            if event::poll(Duration::from_millis(250)).map_err(|e| MdError(e.to_string()))? {
-                if let Event::Key(key) = event::read().map_err(|e| MdError(e.to_string()))? {
-                    if key.kind == KeyEventKind::Press {
-                        self.handle_key(key)?;
-                    }
-                }
+            if event::poll(Duration::from_millis(250)).map_err(|e| MdError(e.to_string()))?
+                && let Event::Key(key) = event::read().map_err(|e| MdError(e.to_string()))?
+                && key.kind == KeyEventKind::Press
+            {
+                self.handle_key(key)?;
             }
         }
         Ok(())

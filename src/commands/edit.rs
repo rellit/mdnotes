@@ -1,5 +1,5 @@
 use crate::cli::EditArgs;
-use crate::config::{ensure_setup, SetupOptions};
+use crate::config::{SetupOptions, ensure_setup};
 use crate::git::{sync_pull, sync_push};
 use crate::models::{ItemKind, Status};
 use crate::storage::{read_item, resolve_item, write_item};
