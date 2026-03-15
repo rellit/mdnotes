@@ -1,83 +1,125 @@
-# Features to Implement
+# mdnotes — Feature Reference
 
-This document tracks the features planned for mdnotes - a command-line/TUI application for taking notes and managing tasks.
-
-## Core Features
-
-### Config
-- We'll keep our config in a config File named 'mdnrc' in a place suitable for the current OS. For Linux use ~/.config/mdnotes. For Windows and Mac use proper dirs.
-- When a command gets executed, run a CLI config to create the File.
-- We need a root Folder to store the notes.
-- We need a Repo to sync to (try it, it should be empty in first place?).
-- All other questions/settings that are needed
-
-
-### Task/Note Management
-- Create new notes
-- Edit existing notes
-- Delete notes
-- List all notes/tasks
-- Find notes and tasks by content or title
-- Tag notes for organization
-- Notes with status and/or due date are considered tasks
-
-### Task Management
-- Create tasks with due dates
-- Mark tasks as complete/incomplete
-- List tasks by status (pending, completed)
-- Filter tasks by priority
-- Set task priorities (low, medium, high)
-
-### Storage
-- Store notes in markdown format
-  - Notes/Tasks get Stored as a single Markdown File.
-  - We'll use a Header to Track Title, due, priority and other Attributes.
-  - Task or Note description starts after a line '--'.
-- Local file-based storage
-  - Each File gets a UUID as name.
-  - The Root of our Directory will contain a folder 'notes' for Notes and a folder 'tasks' for tasks.
-  - Tags will be implemented in a dir 'tags' With subdirectories and symlinks to notes/tasks. NAme of Symlink is Just UUID of target.
-    - If this is not possible for win, we need another solution or we'll drop win support.
-- Git integration for syncing notes across devices
-- When executing any command, git should sync first. So there should be no to few conflicts.
-- When git remains in a conflicting State, there should be a UI in TUI for that.
-- Automatic commits when notes are modified
-
-### User Interface
-- Command-line interface (CLI) for quick operations
-  - Named 'mdn'.
-- Should provide a fast command experience such as:
-- mdn add 'Title' -- This should also be usable as mdn a
-- mdn edit uuid -- mdn e -- This should open a Editor for editing. tag symlinks should get updated after closing. Also location if due/status is added Removed.
-- all referneces to uuid should work, if a unique prefix is given, like in git commit hashes. If not unique, it should give us the selection.
-- when listing or finding tasks/notes should be filterable by type.
-  - When adding/removing due or status (which needs fast commands like `mdn due <DATE/TIME> <ID>` and `mdn st <STATUS> <ID>`) we need to change dir.
-  - Every Change should result in a commit.
-- Text-based User Interface (TUI) for interactive browsing
-  - Named mdnui.
-  - Lets us browse Notes and Tasks in 2 'Tabs'.
-  - Preview of selected Task/Node
-  - Fast editing/tagging
-  - Due overview
-- Syntax highlighting for markdown in preview
-
-### Cross-Platform Support
-- Windows support
-- Linux support
-- macOS support
-
-## Future Enhancements
-
-### Advanced Features
-- CLI command completion for: zsh/bash/fish
-- Note templates
-- Export notes to different formats (PDF, HTML)
-- Encryption for sensitive notes
-- Full-text search with indexing
-- Note linking and backlinks
-- Daily notes / journal mode
-- Attachments support
+This document describes the features that are currently implemented in mdnotes.
 
 ---
 
-**Note:** This is a living document. Features will be prioritized and moved to TODO.md as they are planned for implementation.
+## Configuration
+
+- Platform-appropriate config file (`mdnrc`) stored at:
+  - **Linux**: `~/.config/mdnotes/mdnrc`
+  - **macOS / Windows**: OS-standard config directory
+- Interactive first-run setup via `mdn config`
+  - Configures the note root directory
+  - Configures an optional remote git repository for syncing
+  - Configures the editor to use when opening items
+- Override paths via `--config-home` / `--root-override` (useful for testing)
+
+---
+
+## Note & Task Management
+
+- **Create** notes and tasks (`mdn add` / `mdn a`)
+  - Optional `--due`, `--status`, `--priority`, `--tags`, `--body` flags
+- **Edit** an existing item (`mdn edit` / `mdn e <id>`)
+  - Opens `$EDITOR` when called without extra flags
+  - Supports `--title`, `--due`, `--status`, `--priority`, `--tags`, `--body` flags
+- **Delete** an item (`mdn delete` / `mdn d <id>`)
+- **Show** full item content (`mdn show` / `mdn s <id>`)
+- **List** all items (`mdn list` / `mdn ls`)
+  - Optional filter query (see [Filtering](#filtering) below)
+  - Results are grouped into Notes and Tasks
+- **Mark complete / incomplete** (`mdn complete` / `mdn c <id>`, `mdn incomplete` / `mdn ic <id>`)
+- **Set due date** (`mdn due <id> [date]`)
+- **Set priority** (`mdn priority` / `mdn p <id> [value]`)
+
+### Tasks vs Notes
+
+Any item that has a due date is automatically treated as a **task**. Notes without a due date remain plain notes. Priority can be set on both.
+
+---
+
+## Filtering
+
+The `mdn list` command accepts an optional infix query string with standard operator precedence (`not` > `and` > `or`). Parentheses are supported.
+
+| Token | Meaning |
+|---|---|
+| `.task` | Item has a due date (is a task) |
+| `#<tag>` | Item carries the given tag |
+| `title:<substring>` | Title contains the given substring |
+| `tagged` | Item has at least one tag |
+| `prio:<n>` | Priority equals n |
+| `prio:><n>` | Priority greater than n |
+| `prio:<<n>` | Priority less than n |
+| `prio:>=<n>` | Priority greater than or equal to n |
+| `prio:<=<n>` | Priority less than or equal to n |
+| `due:<yyyymmdd>` | Due date equals (compact YYYYMMDD or YYYY-MM-DD) |
+| `due:><date>` | Due date is after date |
+| `due:<<date>` | Due date is before date |
+| `due:>=<date>` | Due date is on or after date |
+| `due:<=<date>` | Due date is on or before date |
+| `and` | Logical AND |
+| `or` | Logical OR |
+| `not` | Logical NOT (prefix) |
+
+**Examples:**
+
+```
+mdn list .task
+mdn list ".task and #urgent"
+mdn list "(.task or #note) and prio:>3"
+mdn list "not .task and tagged"
+mdn list "due:<=20260401"
+```
+
+---
+
+## Storage
+
+- Each item is stored as a Markdown file at `<root>/<uuid>/MAIN.md`
+- Metadata (title, due, priority, status, tags) is stored in a YAML-like header; body follows after a `--` separator
+- UUIDs can be abbreviated to any unique prefix in all commands (similar to git commit hashes)
+
+---
+
+## Git Sync
+
+- On every mutating command (edit, delete, complete, due, priority) mdnotes pulls from the remote before making changes and commits + pushes afterwards
+- `mdn sync` — manual pull + push
+
+---
+
+## User Interface
+
+### CLI (`mdn`)
+
+All commands have short aliases:
+
+| Command | Aliases |
+|---|---|
+| `add` | `a` |
+| `list` | `ls`, `l` |
+| `delete` | `d`, `del` |
+| `edit` | `e` |
+| `complete` | `c` |
+| `incomplete` | `ic` |
+| `show` | `sh`, `s` |
+| `priority` | `p` |
+
+### TUI (`mdnui`)
+
+- Browse all notes and tasks in an interactive terminal UI
+- Preview selected item in Markdown
+- Keyboard-driven navigation
+
+---
+
+## Cross-Platform Support
+
+| Platform | Binaries |
+|---|---|
+| Linux x86_64 | `mdn`, `mdnui` |
+| macOS x86_64 | `mdn`, `mdnui` |
+| macOS ARM64 | `mdn`, `mdnui` |
+| Windows x86_64 | `mdn.exe`, `mdnui.exe` |

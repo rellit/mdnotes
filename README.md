@@ -1,91 +1,110 @@
 # mdnotes
 
-A simple command-line/TUI application for taking notes and managing tasks, with markdown support and git-based syncing.
+A fast, keyboard-driven command-line and TUI application for taking notes and managing tasks, with Markdown storage and git-based syncing across devices.
 
 ## Features
 
-See [FEATURES.md](FEATURES.md) for a comprehensive list of planned features.
+- **Markdown storage** — every note/task is a plain Markdown file you can open in any editor  
+- **Tasks from notes** — any item with a due date automatically becomes a task  
+- **Priority & tagging** — set numeric priorities and free-form `#tags` on any item  
+- **Git sync** — automatic commit + push/pull on every command when a remote is configured  
+- **Short CLI aliases** — `mdn a`, `mdn e <id>`, `mdn d <id>`, prefix-based UUID matching  
+- **Interactive TUI** — browse notes and tasks, preview Markdown, fast editing (`mdnui`)  
+- **Cross-platform** — Linux (x86_64), macOS (x86_64 & ARM64), Windows (x86_64)
+
+See [FEATURES.md](FEATURES.md) for a detailed feature reference.
 
 ## Installation
 
-### From Release
+### Linux
 
-Download the latest release for your platform from the [releases page](https://github.com/rellit/mdnotes/releases).
+```sh
+curl -fsSL https://raw.githubusercontent.com/rellit/mdnotes/main/install.sh | sh
+```
 
-### From Source
+Binaries (`mdn`, `mdnui`) are installed to `~/.local/bin`.  
+If that directory is not yet in your `PATH`, the installer will tell you what to add to your shell profile.
 
-```bash
-# Clone the repository
+### macOS
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/rellit/mdnotes/main/install.sh | sh
+```
+
+Binaries (`mdn`, `mdnui`) are installed to `~/.local/bin`.
+
+### Windows
+
+Open **PowerShell** and run:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/rellit/mdnotes/main/install.ps1 | iex
+```
+
+Binaries (`mdn.exe`, `mdnui.exe`) are installed to `%LOCALAPPDATA%\mdnotes\bin`, which is added to your user `PATH` automatically.
+
+### Manual download
+
+Download the pre-built archive for your platform from the [releases page](https://github.com/rellit/mdnotes/releases) and extract the binaries to any directory on your `PATH`.
+
+| Platform | Archive |
+|---|---|
+| Linux x86_64 | `mdnotes-linux-x86_64.tar.gz` |
+| macOS x86_64 | `mdnotes-macos-x86_64.tar.gz` |
+| macOS ARM64 | `mdnotes-macos-aarch64.tar.gz` |
+| Windows x86_64 | `mdnotes-windows-x86_64.zip` |
+
+### From source
+
+```sh
 git clone https://github.com/rellit/mdnotes.git
 cd mdnotes
-
-# Build with cargo
 cargo build --release
-
-# The binary will be available at target/release/mdnotes
+# binaries: target/release/mdn  target/release/mdnui
 ```
 
-## Usage
+## Quick start
 
-```bash
-mdnotes [OPTIONS] [COMMAND]
+```sh
+# First run — interactive setup (config file + note root + optional git remote)
+mdn config
+
+# Add a note
+mdn add "My first note"
+
+# Add a task with a due date
+mdn add "Fix the bug" --due 20260320
+
+# List everything
+mdn list
+
+# List only tasks
+mdn list .task
+
+# Edit a note (opens $EDITOR)
+mdn edit <uuid-or-prefix>
+
+# Open the interactive TUI
+mdnui
 ```
+
+Run `mdn --help` for the full command reference.
 
 ## Development
 
 ### Prerequisites
 
 - Rust 1.70 or later
-- Cargo
 
-### Building
+### Build & test
 
-```bash
+```sh
 cargo build
-```
-
-### Running
-
-```bash
-cargo run
-```
-
-### Testing
-
-```bash
 cargo test
-```
-
-### Code Style
-
-This project follows Rust standard formatting guidelines. Format your code with:
-
-```bash
 cargo fmt
-```
-
-Run clippy for linting:
-
-```bash
 cargo clippy
 ```
 
-## Cross-Platform Support
-
-mdnotes is designed to work on:
-- Windows (x86_64)
-- Linux (x86_64)
-- macOS (x86_64 and ARM64)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Roadmap
-
-See [TODO.md](TODO.md) for the current implementation roadmap.
-
+MIT — see [LICENSE](LICENSE).
