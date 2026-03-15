@@ -70,17 +70,18 @@ fn dispatch(cli: Cli) -> MdResult<Vec<String>> {
         remote_override: None,
         editor_override: None,
     };
+    let verbose = cli.verbose;
     match cli.command {
         Commands::Config(args) => commands::config::run(args, setup_opts),
         Commands::Add(args) => commands::add::run(args, setup_opts),
-        Commands::List(args) => commands::list::run(args, setup_opts),
+        Commands::List(args) => commands::list::run(args, setup_opts, verbose),
         Commands::Delete { id } => commands::delete::run(id, setup_opts),
         Commands::Edit(args) => commands::edit::run(args, setup_opts),
-        Commands::Complete { id } => commands::complete::run(id, true, setup_opts),
-        Commands::Incomplete { id } => commands::complete::run(id, false, setup_opts),
-        Commands::Due { id, due } => commands::due::run(id, due, setup_opts),
+        Commands::Complete { id } => commands::complete::run(id, true, setup_opts, verbose),
+        Commands::Incomplete { id } => commands::complete::run(id, false, setup_opts, verbose),
+        Commands::Due { id, due } => commands::due::run(id, due, setup_opts, verbose),
         Commands::Show { id } => commands::show::run(id, setup_opts),
-        Commands::Priority(args) => commands::priority::run(args, setup_opts),
+        Commands::Priority(args) => commands::priority::run(args, setup_opts, verbose),
         Commands::Sync => commands::sync::run(setup_opts),
     }
 }

@@ -1,4 +1,4 @@
-use mdnotes::config::{ensure_setup, find_mdn_file, save_config, SetupOptions};
+use mdnotes::config::{SetupOptions, ensure_setup, find_mdn_file, save_config};
 use mdnotes::git::sync_pull;
 use mdnotes::models::Status;
 use mdnotes::storage::{load_all_items, load_items, resolve_item};
@@ -278,12 +278,19 @@ fn edit_without_fields_opens_editor_and_sets_due() {
     }
     std::fs::write(&main_path, content).unwrap();
     let prev_editor = std::env::var("EDITOR").ok();
-    std::env::set_var("EDITOR", "true");
+    // SAFETY: EDITOR is only read by the child process spawned inside run_with;
+    // no other thread in this process reads it concurrently during this test.
+    unsafe {
+        std::env::set_var("EDITOR", "true");
+    }
     run_with(&base, &["edit", &id]);
-    if let Some(prev) = prev_editor {
-        std::env::set_var("EDITOR", prev);
-    } else {
-        std::env::remove_var("EDITOR");
+    // SAFETY: same rationale as above; restoring the previous value after the child exits.
+    unsafe {
+        if let Some(prev) = prev_editor {
+            std::env::set_var("EDITOR", prev);
+        } else {
+            std::env::remove_var("EDITOR");
+        }
     }
     // File should still be in the same UUID directory
     assert!(main_path.exists());
@@ -417,11 +424,18 @@ fn list_query_priority_range() {
 fn delete_removes_item_directory() {
     let base = temp_home("delete");
     run_with(&base, &["add", "Tagged", "--tags", "one,two"]);
-    let list = run_with(&base, &["list"]);
-    let id = list[0].split(' ').next().unwrap().to_string();
-    let item_dir = base.join("repo").join(&id);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    let full_id = all[0].id.clone();
+    let item_dir = base.join("repo").join(&full_id);
     assert!(item_dir.exists());
-    run_with(&base, &["delete", &id]);
+    run_with(&base, &["delete", &full_id]);
     assert!(!item_dir.exists());
 }
 
@@ -430,12 +444,14 @@ fn sync_pull_fast_forwards_remote_updates() {
     let base = temp_home("sync_pull_ff");
     let remote = base.join("remote.git");
     let remote_str = remote.to_string_lossy().to_string();
-    assert!(Command::new("git")
-        .args(["init", "--bare", &remote_str])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", &remote_str])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     run_with(&base, &["config", "--remote", &remote_str]);
     run_with(&base, &["add", "Initial"]);
@@ -450,48 +466,60 @@ fn sync_pull_fast_forwards_remote_updates() {
     let initial_head = git_rev_parse(&config.root);
 
     let clone_dir = base.join("clone");
-    assert!(Command::new("git")
-        .args(["clone", &remote_str, clone_dir.to_string_lossy().as_ref()])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["config", "user.email", "tester@example.com"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["config", "user.name", "Tester"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .args(["clone", &remote_str, clone_dir.to_string_lossy().as_ref()])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["config", "user.email", "tester@example.com"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["config", "user.name", "Tester"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
     fs::write(clone_dir.join("README.md"), "update").unwrap();
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["add", "README.md"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["commit", "-m", "remote update"])
-        .output()
-        .unwrap()
-        .status
-        .success());
-    assert!(Command::new("git")
-        .current_dir(&clone_dir)
-        .args(["push"])
-        .output()
-        .unwrap()
-        .status
-        .success());
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["add", "README.md"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["commit", "-m", "remote update"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert!(
+        Command::new("git")
+            .current_dir(&clone_dir)
+            .args(["push"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
 
     let before_head = git_rev_parse(&config.root);
     assert_eq!(before_head, initial_head);
@@ -683,4 +711,102 @@ fn find_mdn_file_traverses_upward() {
     // a .mdn exists in an ancestor is tested implicitly through integration.
     // Here we confirm the API is accessible.
     let _ = find_mdn_file; // ensure it's exported
+}
+
+#[test]
+fn validate_due_accepts_compact_yyyymmdd() {
+    // YYYYMMDD compact form should be accepted and stored as YYYY-MM-DD.
+    let base = temp_home("compact_due");
+    run_with(&base, &["add", "Compact Task", "--due", "20991231"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    assert_eq!(all.len(), 1);
+    // Compact form should be normalised to dashed form.
+    assert_eq!(all[0].due, Some("2099-12-31".into()));
+    assert!(all[0].is_task());
+}
+
+#[test]
+fn due_command_accepts_compact_yyyymmdd() {
+    // The `due` subcommand should also accept YYYYMMDD and store YYYY-MM-DD.
+    let base = temp_home("compact_due_cmd");
+    run_with(&base, &["add", "Schedule Later"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+    let id = all[0].id.clone();
+    run_with(&base, &["due", &id, "20990202"]);
+    let (_p, updated) = resolve_item(&config, &id).unwrap();
+    assert_eq!(updated.due, Some("2099-02-02".into()));
+}
+
+#[test]
+fn list_ids_are_shortened_and_verbose_shows_full() {
+    let base = temp_home("short_ids");
+    run_with(&base, &["add", "Alpha Note"]);
+    run_with(&base, &["add", "Beta Note"]);
+    let config = ensure_setup(SetupOptions {
+        root_override: Some(base.join("repo")),
+        config_home: Some(base.join("config")),
+        remote_override: None,
+        editor_override: None,
+    })
+    .unwrap();
+    let all = load_all_items(&config).unwrap();
+
+    // Default list: displayed IDs are unique prefixes (may be shorter than full UUID).
+    let list = run_with(&base, &["list"]);
+    assert_eq!(list.len(), 2);
+    for line in &list {
+        let display_id = line.split(' ').next().unwrap();
+        // The prefix must match exactly one item.
+        let matching: Vec<_> = all
+            .iter()
+            .filter(|i| i.id.starts_with(display_id))
+            .collect();
+        assert_eq!(
+            matching.len(),
+            1,
+            "display id '{display_id}' should resolve to exactly one item"
+        );
+        // The displayed prefix should be no longer than the full UUID.
+        assert!(display_id.len() <= matching[0].id.len());
+        // The prefix should actually work as a resolve target.
+        resolve_item(&config, display_id).expect("shortened id should resolve via prefix matching");
+    }
+
+    // With --verbose, displayed IDs must be the full UUIDs.
+    let verbose_list = {
+        let config_home = base.join("config").to_string_lossy().into_owned();
+        let root_override = base.join("repo").to_string_lossy().into_owned();
+        mdnotes::run_with_args([
+            "mdn",
+            "--verbose",
+            "--config-home",
+            &config_home,
+            "--root-override",
+            &root_override,
+            "list",
+        ])
+        .expect("verbose list should succeed")
+    };
+    assert_eq!(verbose_list.len(), 2);
+    for line in &verbose_list {
+        let display_id = line.split(' ').next().unwrap();
+        assert!(
+            all.iter().any(|i| i.id == display_id),
+            "verbose display id '{display_id}' should be a full UUID"
+        );
+    }
 }

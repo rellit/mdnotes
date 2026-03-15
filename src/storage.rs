@@ -44,10 +44,10 @@ fn write_item_inner(config: &Config, item: &Item, include_examples: bool) -> MdR
     fs::create_dir_all(&item_dir)?;
     // Always write to lowercase "main.md"; if an old mixed-case file exists, remove it first.
     let path = item_dir.join("main.md");
-    if let Some(existing) = find_main_md(&item_dir) {
-        if existing != path {
-            fs::remove_file(&existing)?;
-        }
+    if let Some(existing) = find_main_md(&item_dir)
+        && existing != path
+    {
+        fs::remove_file(&existing)?;
     }
     let tmp_path = item_dir.join("main.md.tmp");
     {
@@ -196,7 +196,32 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
     })
 }
 
-/// Finds an item whose UUID directory name starts with `prefix`.
+/// Returns all item IDs (directory names) present in the root, without
+/// parsing the contents of each item file.  This is cheaper than
+/// [`load_all_items`] and is used to compute shortest unique prefixes.
+pub fn list_item_ids(config: &Config) -> MdResult<Vec<String>> {
+    let root = &config.root;
+    let mut ids = Vec::new();
+    if !root.exists() {
+        return Ok(ids);
+    }
+    for entry in fs::read_dir(root)? {
+        let entry = entry?;
+        let dir_path = entry.path();
+        if !dir_path.is_dir() {
+            continue;
+        }
+        let name = dir_path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if !name.starts_with('.') && find_main_md(&dir_path).is_some() {
+            ids.push(name);
+        }
+    }
+    Ok(ids)
+}
+
 /// Returns `(path_to_main.md, item)`.
 pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> {
     let mut matches: Vec<PathBuf> = Vec::new();
@@ -207,12 +232,12 @@ pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> 
             if !dir_path.is_dir() {
                 continue;
             }
-            if let Some(dir_name) = dir_path.file_name().and_then(|n| n.to_str()) {
-                if dir_name.starts_with(prefix) && !dir_name.starts_with('.') {
-                    if let Some(main_path) = find_main_md(&dir_path) {
-                        matches.push(main_path);
-                    }
-                }
+            if let Some(dir_name) = dir_path.file_name().and_then(|n| n.to_str())
+                && dir_name.starts_with(prefix)
+                && !dir_name.starts_with('.')
+                && let Some(main_path) = find_main_md(&dir_path)
+            {
+                matches.push(main_path);
             }
         }
     }
