@@ -29,7 +29,7 @@ fn find_main_md(item_dir: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Writes an item to `<root>/<id>/MAIN.md`.
+/// Writes an item to `<root>/<id>/main.md`.
 pub fn write_item(config: &Config, item: &Item) -> MdResult<PathBuf> {
     write_item_inner(config, item, false)
 }
@@ -197,7 +197,7 @@ pub fn read_item(path: &Path) -> MdResult<Item> {
 }
 
 /// Finds an item whose UUID directory name starts with `prefix`.
-/// Returns `(path_to_MAIN.md, item)`.
+/// Returns `(path_to_main.md, item)`.
 pub fn resolve_item(config: &Config, prefix: &str) -> MdResult<(PathBuf, Item)> {
     let mut matches: Vec<PathBuf> = Vec::new();
     if config.root.exists() {
