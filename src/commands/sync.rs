@@ -1,6 +1,6 @@
-use crate::config::{ensure_setup, SetupOptions};
-use crate::git::{sync_pull, sync_push};
 use crate::MdResult;
+use crate::config::{SetupOptions, ensure_setup};
+use crate::git::{sync_pull, sync_push};
 
 pub fn run(setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;

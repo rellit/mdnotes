@@ -1,7 +1,7 @@
-use crate::config::{ensure_setup, SetupOptions};
+use crate::MdResult;
+use crate::config::{SetupOptions, ensure_setup};
 use crate::git::{sync_pull, sync_push};
 use crate::storage::resolve_item;
-use crate::MdResult;
 use std::fs;
 
 pub fn run(id: String, setup: SetupOptions) -> MdResult<Vec<String>> {

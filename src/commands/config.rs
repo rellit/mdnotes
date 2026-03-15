@@ -1,6 +1,6 @@
-use crate::cli::ConfigArgs;
-use crate::config::{config_path, ensure_setup, SetupOptions};
 use crate::MdResult;
+use crate::cli::ConfigArgs;
+use crate::config::{SetupOptions, config_path, ensure_setup};
 
 pub fn run(args: ConfigArgs, mut setup: SetupOptions) -> MdResult<Vec<String>> {
     if args.root.is_some() {

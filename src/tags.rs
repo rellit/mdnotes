@@ -1,6 +1,6 @@
+use crate::MdResult;
 use crate::config::Config;
 use crate::models::Item;
-use crate::MdResult;
 use std::path::Path;
 
 /// Tag links are no longer maintained as a file-system index.
