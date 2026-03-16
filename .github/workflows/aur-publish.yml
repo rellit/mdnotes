@@ -80,8 +80,8 @@ jobs:
         with:
           pkgname: mdnotes-bin
           pkgbuild: ./aur/PKGBUILD
-          commit-username: ${{ secrets.AUR_USERNAME }}
-          commit-email: ${{ secrets.AUR_EMAIL }}
-          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit-message: "Update to v${{ steps.get_version.outputs.version }}"
-          force-push: true
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to v${{ steps.get_version.outputs.version }}"
+          force_push: true
