@@ -1,6 +1,6 @@
 use crate::cli::EditArgs;
 use crate::config::{SetupOptions, ensure_setup};
-use crate::git::{sync_pull, sync_push};
+use crate::git::sync_push;
 use crate::models::{ItemKind, Status};
 use crate::storage::{read_item, resolve_item, write_item};
 use crate::tags::refresh_tag_links;
@@ -10,7 +10,6 @@ use std::process::Command;
 
 pub fn run(args: EditArgs, setup: SetupOptions) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
-    sync_pull(&config)?;
     let (path, mut item) = resolve_item(&config, &args.id)?;
     let original_id = item.id.clone();
     let has_field_update = args.title.is_some()

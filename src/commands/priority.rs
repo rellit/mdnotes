@@ -1,14 +1,13 @@
 use crate::MdResult;
 use crate::cli::PriorityArgs;
 use crate::config::{SetupOptions, ensure_setup};
-use crate::git::{sync_pull, sync_push};
+use crate::git::sync_push;
 use crate::storage::{list_item_ids, resolve_item, write_item};
 use crate::tags::refresh_tag_links;
 use crate::util::shortest_unique_prefix;
 
 pub fn run(args: PriorityArgs, setup: SetupOptions, verbose: bool) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
-    sync_pull(&config)?;
     let (_path, mut item) = resolve_item(&config, &args.id)?;
     item.priority = args.value;
     write_item(&config, &item)?;
