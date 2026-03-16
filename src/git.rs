@@ -141,10 +141,16 @@ pub fn sync_push(config: &Config, message: &str) -> MdResult<()> {
     push_args.push(&branch);
     let push = git(&config.root, &push_args)?;
     if !push.status.success() {
-        return Err(MdError(format!(
-            "git push failed: {}",
-            String::from_utf8_lossy(&push.stderr)
-        )));
+        let stderr = String::from_utf8_lossy(&push.stderr);
+        if stderr.contains("rejected") {
+            return Err(MdError(format!(
+                "git push rejected: remote has changes not present locally.\n\
+                 Run 'mdnotes sync' to pull and merge remote changes first.\n\
+                 {}",
+                stderr.trim()
+            )));
+        }
+        return Err(MdError(format!("git push failed: {}", stderr)));
     }
     Ok(())
 }

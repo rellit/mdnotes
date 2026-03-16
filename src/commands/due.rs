@@ -1,6 +1,6 @@
 use crate::MdResult;
 use crate::config::{SetupOptions, ensure_setup};
-use crate::git::{sync_pull, sync_push};
+use crate::git::sync_push;
 use crate::models::{ItemKind, Status};
 use crate::storage::{list_item_ids, resolve_item, write_item};
 use crate::tags::refresh_tag_links;
@@ -13,7 +13,6 @@ pub fn run(
     verbose: bool,
 ) -> MdResult<Vec<String>> {
     let config = ensure_setup(setup)?;
-    sync_pull(&config)?;
     let (_path, mut item) = resolve_item(&config, &id)?;
     if let Some(due_value) = due {
         let validated = validate_due_inner(&due_value)?;
