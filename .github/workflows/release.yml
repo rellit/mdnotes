@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             name: Linux x86_64
             archive_name: mdnotes-linux-x86_64.tar.gz
